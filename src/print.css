@@ -1,0 +1,145 @@
+/* Styles du document rendu (aperçu + impression).
+   Partagés entre l'éditeur (canvas), l'aperçu et l'impression. */
+
+.doc {
+  background: #fff;
+  font-family: Arial, Helvetica, sans-serif;
+  color: #111111;
+  line-height: 1.45;
+}
+
+.pdf-page {
+  background: #fff;
+  box-sizing: border-box;
+  page-break-after: always;
+  position: relative;
+}
+
+.pdf-page.last {
+  page-break-after: auto;
+}
+
+.pdf-content {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  align-items: flex-start;
+  position: relative;
+  z-index: 1;
+}
+
+.pdf-free {
+  display: block;
+  position: relative;
+  z-index: 1;
+}
+
+.pdf-el-free {
+  position: absolute;
+  box-sizing: border-box;
+}
+
+.pdf-el-free > .pdf-container {
+  width: 100%;
+  height: 100%;
+}
+
+.pdf-el {
+  min-width: 0;
+}
+
+.pdf-container {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  width: 100%;
+  box-sizing: border-box;
+  position: relative;
+}
+
+.pdf-title,
+.pdf-text,
+.pdf-field {
+  margin: 0;
+}
+
+.pdf-field {
+  display: flex;
+  align-items: baseline;
+}
+
+.pdf-label {
+  margin-right: 5px;
+}
+
+.pdf-table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0;
+}
+
+.pdf-divider {
+  border: 0;
+}
+
+.pdf-spacer {
+  width: 100%;
+}
+
+.pdf-page-break {
+  page-break-after: always;
+}
+
+/* Fond de page et filigrane */
+.page-backdrop {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.page-bg-color,
+.page-bg-image {
+  position: absolute;
+  inset: 0;
+}
+
+.page-wm {
+  white-space: pre;
+  font-family: Arial, Helvetica, sans-serif;
+  color: #000000;
+  font-weight: 700;
+  letter-spacing: 2px;
+  user-select: none;
+}
+
+/* Le document caché à l'écran, visible uniquement à l'impression */
+#print-root {
+  display: none;
+}
+
+@media print {
+  #print-root {
+    display: block;
+    position: absolute;
+    left: 0;
+    top: 0;
+  }
+
+  body {
+    background: #fff;
+  }
+
+  .toolbar,
+  .workspace,
+  .modal-overlay,
+  .toast,
+  .print-preview,
+  .print-empty {
+    display: none !important;
+  }
+}
