@@ -24,13 +24,29 @@ function writeFileStore(store) {
 // ————— Backend Redis (Upstash / Vercel integration) —————
 let kvInit
 let kvError = null
+// Noms de variables d'env supportés : l'intégration Upstash via le Vercel
+// Marketplace préfixe par STORAGE_ ; @vercel/kv historique utilise KV_ ; l'app
+// supporte aussi UPSTASH_REDIS_* directement.
+function redisVars() {
+  const url =
+    process.env.UPSTASH_REDIS_REST_URL ||
+    process.env.KV_REST_API_URL ||
+    process.env.STORAGE_KV_REST_API_URL ||
+    process.env.STORAGE_REDIS_URL ||
+    null
+  const token =
+    process.env.UPSTASH_REDIS_REST_TOKEN ||
+    process.env.KV_REST_API_TOKEN ||
+    process.env.STORAGE_KV_REST_API_TOKEN ||
+    null
+  return { url, token }
+}
 // Initialisation paresseuse : pas d'await au niveau du module (robuste à la
 // compilation en CommonJS par Vercel).
 function getKv() {
   if (kvInit === undefined) {
     kvInit = (async () => {
-      const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL
-      const token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN
+      const { url, token } = redisVars()
       if (!url || !token) return null
       const { Redis } = await import('@upstash/redis')
       return new Redis({ url, token })
@@ -205,18 +221,21 @@ export async function deleteTemplate(id) {
 
 export function storageMode() {
   if (process.env.MYSQL_URL || process.env.MYSQL_HOST) return 'mysql (base externe)'
-  if (process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL) return 'redis (Upstash / Vercel integration)'
+  if (redisVars().url) return 'redis (Upstash / Vercel integration)'
   return 'fichier local'
 }
 
 // État effectif du stockage, pour diagnostic (/api/health).
 export async function storageStatus() {
+  const { url, token } = redisVars()
   return {
     modeConfigured: storageMode(),
     backendEffectif: effectiveBackend || (await resolveBackend()),
     mysqlConfigured: !!(process.env.MYSQL_URL || process.env.MYSQL_HOST),
     mysqlError: mysqlError || null,
-    redisConfigured: !!(process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL),
+    redisConfigured: !!(url && token),
+    redisUrl: !!url,
+    redisToken: !!token,
     redisError: kvError || null,
   }
 }

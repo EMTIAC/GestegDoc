@@ -418,7 +418,7 @@ choisi **automatiquement** à partir des variables d'environnement, avec la prio
 | Backend | Activation | Où vivent les données |
 |---|---|---|
 | **Fichier local** *(défaut)* | aucun réglage | `server/data/templates.json` (créé au premier enregistrement) |
-| **Redis Upstash** *(gratuit)* | `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` (ou `KV_REST_API_URL` + `KV_REST_API_TOKEN`) | Votre base Redis Upstash (Vercel Integration) |
+| **Redis Upstash** *(gratuit)* | `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` (ou `KV_REST_API_URL` + `KV_REST_API_TOKEN`, ou `STORAGE_KV_REST_API_URL` + `STORAGE_KV_REST_API_TOKEN` fournis par l'intégration Vercel) | Votre base Redis Upstash (Vercel Integration) |
 | **MySQL externe** | `MYSQL_URL` **ou** `MYSQL_HOST` + `MYSQL_USER` + `MYSQL_PASSWORD` + `MYSQL_DATABASE` | Votre base MySQL hébergée ailleurs |
 
 Variables MySQL optionnelles : `MYSQL_PORT` (défaut `3306`) et `MYSQL_SSL=1`
