@@ -119,8 +119,9 @@ function PageBreakElement() {
   return <div className="pdf-page-break" />
 }
 
-function ImageElement({ p, free }) {
-  if (!p.src) {
+function ImageElement({ p, free, data }) {
+  const src = substitute(p.src, data)
+  if (!src) {
     return (
       <div className="pdf-image-empty" style={{ height: free ? '100%' : `${p.height || 40}mm` }}>
         Image
@@ -130,7 +131,7 @@ function ImageElement({ p, free }) {
   return (
     <img
       className="pdf-image"
-      src={p.src}
+      src={src}
       alt=""
       style={{
         width: '100%',
@@ -177,7 +178,7 @@ export default function ElementView({ element, data, free }) {
     case 'table':
       return <TableElement p={p} data={data} />
     case 'image':
-      return <ImageElement p={p} free={free} />
+      return <ImageElement p={p} free={free} data={data} />
     case 'container': {
       const childrenEls = element.children || []
       if (p.source) {

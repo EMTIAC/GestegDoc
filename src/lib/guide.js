@@ -59,6 +59,7 @@ export function buildGuide(template) {
 
   const fieldRefs = []
   const textRefs = []
+  const imageRefs = []
   const tables = []
   const sources = []
   walk(pages.flatMap((p) => p.elements), (el) => {
@@ -67,13 +68,16 @@ export function buildGuide(template) {
     if (el.type === 'text' || el.type === 'title') {
       for (const path of textPaths(p.text)) textRefs.push(path)
     }
+    if (el.type === 'image') {
+      for (const path of textPaths(p.src)) imageRefs.push(path)
+    }
     if (el.type === 'table') tables.push({ dataPath: p.dataPath, columns: (p.columns || []).map((c) => `${c.header} → ${c.field}`) })
     if (el.type === 'container' && p.source) sources.push(p.source)
   })
 
   L.push('## 3. Champs utilisés par les éléments')
   L.push('')
-  if (fieldRefs.length || textRefs.length || tables.length || sources.length) {
+  if (fieldRefs.length || textRefs.length || imageRefs.length || tables.length || sources.length) {
     if (fieldRefs.length) {
       L.push('### Champs liés')
       L.push('')
@@ -87,6 +91,15 @@ export function buildGuide(template) {
       L.push('### Variables dans les textes')
       L.push('')
       for (const path of uniq) L.push(`- \`${path}\``)
+      L.push('')
+    }
+    if (imageRefs.length) {
+      const uniq = [...new Set(imageRefs)]
+      L.push('### Variables dans les URL d’images')
+      L.push('')
+      L.push('Le gabarit contient des images dont l’URL est dynamique :')
+      L.push('')
+      for (const path of uniq) L.push(`- \`{{${path}}}\``)
       L.push('')
     }
     if (tables.length) {

@@ -191,6 +191,8 @@ Les champs utilisent des chemins avec des points :
 - Un **champ lié** à `facture.numero` affiche la valeur correspondante.
 - Un **tableau** dont la source est `lignes` répète ses colonnes pour chaque ligne.
 - Dans un texte, `{{facture.client}}` est remplacé par la valeur.
+- Dans l'**URL d'une image**, `{{facture.logo_url}}` est remplacé par la valeur
+  (l'image se charge depuis l'URL issue des données).
 
 Cliquer **Appliquer** pour valider.
 

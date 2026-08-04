@@ -86,7 +86,7 @@ export default function Documentation() {
                 <tr><td><strong>Champ lié</strong></td><td>Libellé + valeur issue des données (<InlineCode>facture.numero</InlineCode>)</td></tr>
                 <tr><td><strong>Tableau</strong></td><td>Table dynamique alimentée par un tableau de données (<InlineCode>lignes</InlineCode>)</td></tr>
                 <tr><td><strong>Bloc</strong></td><td>Conteneur : y déposer des éléments, côte à côte ou imbriqués ; répétable sur des données</td></tr>
-                <tr><td><strong>Image</strong></td><td>Image par URL ou upload local, avec dimensions, ajustement (remplir / contenir / étirer) et rayon</td></tr>
+                <tr><td><strong>Image</strong></td><td>Image par URL ou upload local, avec dimensions, ajustement (remplir / contenir / étirer) et rayon. L'URL accepte les données dynamiques (<InlineCode>{'{{facture.logo_url}}'}</InlineCode>)</td></tr>
                 <tr><td><strong>Séparateur</strong></td><td>Trait horizontal</td></tr>
                 <tr><td><strong>Espace</strong></td><td>Blanc vertical réglable</td></tr>
               </tbody>

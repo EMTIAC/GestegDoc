@@ -11,12 +11,14 @@
 .toolbar {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 10px 16px;
+  gap: 12px;
+  padding: 8px 14px;
   background: #1f2430;
   color: #fff;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
   z-index: 10;
+  flex-wrap: nowrap;
+  min-width: 0;
 }
 
 a.brand {
@@ -30,6 +32,7 @@ a.brand {
   gap: 8px;
   font-weight: 700;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .logo {
@@ -49,7 +52,8 @@ a.brand {
 }
 
 .name-input {
-  flex: 0 1 260px;
+  flex: 0 1 220px;
+  min-width: 130px;
   padding: 7px 10px;
   border: 1px solid transparent;
   border-radius: 6px;
@@ -65,9 +69,64 @@ a.brand {
 
 .toolbar-actions {
   display: flex;
-  gap: 8px;
+  align-items: center;
+  gap: 6px;
   margin-left: auto;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  flex-shrink: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+}
+
+.toolbar-actions::-webkit-scrollbar {
+  height: 5px;
+}
+
+.toolbar-actions::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 3px;
+}
+
+.toolbar-actions::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Boutons de la barre d'outils : compacts, jamais coupés ni repliés */
+.toolbar .btn {
+  white-space: nowrap;
+  padding: 6px 10px;
+  font-size: 12.5px;
+}
+
+.toolbar-actions .btn-row,
+.toolbar-actions .save-status,
+.toolbar-actions .user-chip {
+  flex-shrink: 0;
+}
+
+/* Allège la barre sur les écrans étroits pour rester sur une ligne */
+@media (max-width: 1160px) {
+  .toolbar .brand-name {
+    display: none;
+  }
+}
+
+@media (max-width: 960px) {
+  .toolbar .name-input {
+    max-width: 120px;
+  }
+  .toolbar .save-label {
+    display: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .toolbar .user-chip {
+    display: none;
+  }
 }
 
 .print-title {

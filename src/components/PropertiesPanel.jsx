@@ -224,7 +224,13 @@ function ImageForm({ p, set, contentW }) {
   return (
     <>
       <WidthControl value={p.width ?? 100} onChange={(v) => set({ width: v })} />
-      <Text label="URL de l'image" value={p.src} placeholder="https://... ou data:..." onChange={(v) => set({ src: v })} />
+      <Text
+        label="URL de l'image"
+        value={p.src}
+        placeholder="https://... data:... ou {{chemin.donnee}}"
+        onChange={(v) => set({ src: v })}
+      />
+      <p className="hint">L'URL accepte les données dynamiques : utilisez <code>{'{{chemin.donnee}}'}</code> (ex. <code>{'{{facture.logo_url}}'}</code>).</p>
       <div className="prop">
         <span>Ou importer un fichier</span>
         <span className="btn-row">
