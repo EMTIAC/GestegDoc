@@ -45,9 +45,15 @@ export function createApp() {
   })
 
   // Sert le build statique (dist/) s'il existe + fallback SPA.
-  // Sur Vercel, dist/ est inclus dans la fonction via includeFiles (vercel.json).
-  const dist = path.join(__dirname, '..', 'dist')
-  if (fs.existsSync(dist)) {
+  // Plusieurs chemins candidats : en local, dist/ est à côté de server/ ; dans la
+  // fonction Vercel (bundlée), __dirname et cwd() peuvent différer de l'emplacement
+  // réel du build copié par includeFiles.
+  const dist = [
+    path.join(__dirname, '..', 'dist'),
+    path.join(__dirname, 'dist'),
+    path.join(process.cwd(), 'dist'),
+  ].find((dir) => fs.existsSync(path.join(dir, 'index.html')))
+  if (dist) {
     app.use(express.static(dist))
     app.use((req, res, next) => {
       if (req.path.startsWith('/api')) return next()

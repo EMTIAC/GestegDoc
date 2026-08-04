@@ -22,24 +22,28 @@ function writeFileStore(store) {
 }
 
 // ————— Backend Redis (Upstash / Vercel integration) —————
-let kv = null
-let kvMode = false
-
-try {
-  const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN
-  if (url && token) {
-    const { Redis } = await import('@upstash/redis')
-    kv = new Redis({ url, token })
-    kvMode = true
+let kvInit = null
+// Initialisation paresseuse : pas d'await au niveau du module (robuste à la
+// compilation en CommonJS par Vercel).
+function getKv() {
+  if (!kvInit) {
+    kvInit = (async () => {
+      const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL
+      const token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN
+      if (!url || !token) return null
+      const { Redis } = await import('@upstash/redis')
+      return new Redis({ url, token })
+    })().catch(() => {
+      console.warn('[storage] @upstash/redis indisponible')
+      return null
+    })
   }
-} catch {
-  console.warn('[storage] @upstash/redis indisponible, bascule sur le stockage fichier local')
-  kv = null
-  kvMode = false
+  return kvInit
 }
 
 async function readRedisStore() {
+  const kv = await getKv()
+  if (!kv) return {}
   try {
     const raw = await kv.get(STORE_KEY)
     if (!raw) return {}
@@ -50,14 +54,11 @@ async function readRedisStore() {
 }
 
 async function writeRedisStore(store) {
-  await kv.set(STORE_KEY, store)
+  const kv = await getKv()
+  if (kv) await kv.set(STORE_KEY, store)
 }
 
 // ————— Backend MySQL (base externe, compatible Vercel) —————
-let pool = null
-let mysqlMode = false
-let mysqlReady = null
-
 function mysqlPoolConfig() {
   if (process.env.MYSQL_URL) {
     const uri = process.env.MYSQL_URL
@@ -75,41 +76,34 @@ function mysqlPoolConfig() {
   return cfg
 }
 
-try {
-  if (process.env.MYSQL_URL || process.env.MYSQL_HOST) {
-    const { default: mysql } = await import('mysql2/promise')
-    pool = mysql.createPool(mysqlPoolConfig())
-    mysqlMode = true
+let mysqlInit = null
+// Schéma minimal + « migrations » idempotentes, exécutées à la première utilisation.
+// Pour faire évoluer le schéma, ajoutez ici des ALTER TABLE idempotents (voir README).
+function getMysql() {
+  if (!mysqlInit) {
+    mysqlInit = (async () => {
+      if (!process.env.MYSQL_URL && !process.env.MYSQL_HOST) return null
+      const { default: mysql } = await import('mysql2/promise')
+      const pool = mysql.createPool(mysqlPoolConfig())
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS templates (
+          id VARCHAR(191) NOT NULL PRIMARY KEY,
+          name VARCHAR(255) NOT NULL DEFAULT '',
+          data LONGTEXT NOT NULL,
+          updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+      `)
+      return pool
+    })().catch((err) => {
+      console.warn('[storage] MySQL indisponible :', err?.message)
+      throw err
+    })
   }
-} catch {
-  console.warn('[storage] mysql2 indisponible, bascule sur un autre backend')
-  pool = null
-  mysqlMode = false
-}
-
-// Schéma minimal + « migrations » idempotentes, exécutées au démarrage du serveur.
-// Aucune commande manuelle n'est nécessaire : pour faire évoluer le schéma, ajoutez
-// ici des instructions ALTER TABLE idempotentes (voir README, section « Stockage »).
-function ensureMysqlTable() {
-  if (!mysqlMode) return Promise.resolve()
-  if (mysqlReady) return mysqlReady
-  mysqlReady = (async () => {
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS templates (
-        id VARCHAR(191) NOT NULL PRIMARY KEY,
-        name VARCHAR(255) NOT NULL DEFAULT '',
-        data LONGTEXT NOT NULL,
-        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-    `)
-    // Exemple d'évolution de schéma (à ajouter si besoin, sans risque de relancer) :
-    // await pool.query(`ALTER TABLE templates ADD COLUMN IF NOT EXISTS kind VARCHAR(20) NOT NULL DEFAULT 'template'`)
-  })()
-  return mysqlReady
+  return mysqlInit
 }
 
 async function readMysqlStore() {
-  await ensureMysqlTable()
+  const pool = await getMysql()
   const [rows] = await pool.query('SELECT id, data FROM templates')
   const store = {}
   for (const row of rows) {
@@ -122,17 +116,25 @@ async function readMysqlStore() {
   return store
 }
 
+// ————— Sélection du backend (priorité MySQL > Redis > fichier) —————
+async function resolveBackend() {
+  if (await getMysql()) return 'mysql'
+  if (await getKv()) return 'redis'
+  return 'file'
+}
+
 // ————— API unifiée —————
-// Priorité des backends : MySQL > Redis > fichier local.
 export async function listTemplates() {
-  if (mysqlMode) return Object.values(await readMysqlStore())
-  if (kvMode) return Object.values(await readRedisStore())
+  const backend = await resolveBackend()
+  if (backend === 'mysql') return Object.values(await readMysqlStore())
+  if (backend === 'redis') return Object.values(await readRedisStore())
   return Object.values(readFileStore())
 }
 
 export async function getTemplate(id) {
-  if (mysqlMode) {
-    await ensureMysqlTable()
+  const backend = await resolveBackend()
+  if (backend === 'mysql') {
+    const pool = await getMysql()
     const [rows] = await pool.query('SELECT data FROM templates WHERE id = ?', [id])
     if (!rows.length) return null
     try {
@@ -141,14 +143,15 @@ export async function getTemplate(id) {
       return null
     }
   }
-  if (kvMode) return (await readRedisStore())[id] || null
+  if (backend === 'redis') return (await readRedisStore())[id] || null
   return readFileStore()[id] || null
 }
 
 export async function putTemplate(id, body) {
-  if (mysqlMode) {
-    await ensureMysqlTable()
-    const tpl = { ...body, meta: { ...(body.meta || {}), id } }
+  const backend = await resolveBackend()
+  const tpl = { ...body, meta: { ...(body.meta || {}), id } }
+  if (backend === 'mysql') {
+    const pool = await getMysql()
     const name = tpl.meta?.name || ''
     await pool.query(
       'INSERT INTO templates (id, name, data) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE name = VALUES(name), data = VALUES(data), updated_at = NOW()',
@@ -156,25 +159,26 @@ export async function putTemplate(id, body) {
     )
     return { ok: true, id }
   }
-  if (kvMode) {
+  if (backend === 'redis') {
     const store = await readRedisStore()
-    store[id] = { ...body, meta: { ...(body.meta || {}), id } }
+    store[id] = tpl
     await writeRedisStore(store)
     return { ok: true, id }
   }
   const store = readFileStore()
-  store[id] = { ...body, meta: { ...(body.meta || {}), id } }
+  store[id] = tpl
   writeFileStore(store)
   return { ok: true, id }
 }
 
 export async function deleteTemplate(id) {
-  if (mysqlMode) {
-    await ensureMysqlTable()
+  const backend = await resolveBackend()
+  if (backend === 'mysql') {
+    const pool = await getMysql()
     await pool.query('DELETE FROM templates WHERE id = ?', [id])
     return { ok: true }
   }
-  if (kvMode) {
+  if (backend === 'redis') {
     const store = await readRedisStore()
     delete store[id]
     await writeRedisStore(store)
@@ -187,7 +191,7 @@ export async function deleteTemplate(id) {
 }
 
 export function storageMode() {
-  if (mysqlMode) return 'mysql (base externe)'
-  if (kvMode) return 'redis (Upstash / Vercel integration)'
+  if (process.env.MYSQL_URL || process.env.MYSQL_HOST) return 'mysql (base externe)'
+  if (process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL) return 'redis (Upstash / Vercel integration)'
   return 'fichier local'
 }
