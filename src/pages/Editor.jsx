@@ -423,7 +423,11 @@ export default function Editor() {
     setSaving(true)
     saveToServer(template)
       .then(() => notify('Enregistré sur le serveur'))
-      .catch(() => notify('Erreur : serveur indisponible (lancer « npm run dev »)'))
+      .catch((err) => {
+        console.error('saveToServer failed:', err)
+        const msg = err instanceof TypeError ? 'API injoignable (serveur non déployé ou hors ligne)' : err.message
+        notify(`Erreur : ${msg}`)
+      })
       .finally(() => setSaving(false))
   }
 

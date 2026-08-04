@@ -362,8 +362,13 @@ get_pdf/
 │                           # guide (génération du guide .md), storage, url, resolve,
 │                           # dnd, pdf (téléchargement PDF)
 ├─ server/
-│  └─ index.js              # API Express + serveur du build
+│  ├─ app.js                # Application Express (routes /api + serveur du build dist/)
+│  ├─ index.js              # Point d'entrée local (app.listen — `npm run dev`, `npm start`)
+│  ├─ storage.js            # Stockage interchangeable (fichier / Redis / MySQL)
 │  └─ data/                 # templates.json (créé au premier enregistrement serveur)
+├─ api/
+│  └─ index.js              # Point d'entrée Vercel (exporte l'application Express)
+├─ vercel.json              # Déploiement Vercel : route tout vers l'API + inclut dist/
 ├─ docs/
 │  └─ INTEGRATION.md        # Guide d'intégration (API / URL)
 ├─ dist/                    # Build de production
@@ -445,6 +450,32 @@ Conditions pour que cela fonctionne depuis Vercel (serverless) :
   entre les requêtes — ne créez pas de connexion par appel.
 - Attention aux **limites de connexions** de votre forfait en cas de trafic soutenu.
 
+### Déployer sur Vercel (l'API est pré-configurée)
+
+Le dépôt contient déjà ce qu'il faut pour que **l'API soit déployée** avec le front :
+
+- `api/index.js` : point d'entrée Vercel qui exporte l'application Express.
+- `vercel.json` : route **toutes** les requêtes vers l'application (rewrites) et inclut le
+  build `dist/` dans la fonction serverless (`functions → includeFiles`).
+
+Sur Vercel, l'application tourne donc **entièrement dans une fonction serverless** qui
+gère à la fois l'interface, les routes `/api/*` (dont « Enregistrer serveur » →
+`PUT /api/templates/:id`) et le fallback SPA.
+
+Étapes :
+
+1. Poussez le code sur Git — le dépôt doit contenir `api/index.js` et `vercel.json`.
+2. Dans le tableau de bord Vercel, importez le dépôt (framework **Vite** détecté).
+3. Ajoutez les variables d'environnement de votre base (voir plus haut) : `MYSQL_URL`
+   (ou `MYSQL_HOST` + `MYSQL_USER` + `MYSQL_PASSWORD` + `MYSQL_DATABASE`) et `MYSQL_SSL=1`
+   si votre hébergeur l'exige.
+4. Déployez, puis vérifiez : ouvrez `https://<votre-app>.vercel.app/api/templates`
+   (doit répondre en JSON), puis testez « Enregistrer serveur ».
+
+> **Diagnostic** : si `GET /api/templates` renvoie la page HTML au lieu de JSON,
+> c'est que le déploiement est resté **statique** (l'API n'a pas été déployée).
+> Vérifiez que `api/index.js` et `vercel.json` sont bien dans le dépôt, puis redéployez.
+
 ### Et les migrations, on fait comment ?
 
 En Laravel on écrit des **migrations** (`php artisan migrate`) car le schéma SQL évolue
@@ -488,11 +519,14 @@ Conséquences :
 
 ### Et sur Vercel, ça fonctionne ?
 
-- **Le front (build statique)** : fonctionne sans problème.
+- **Le front + l'API** : fonctionnent. Grâce à `api/index.js` + `vercel.json`, l'API
+  `/api/*` (donc « Enregistrer serveur ») est **déployée par défaut** et écrit dans le
+  backend configuré (fichier, Redis ou MySQL).
 - **Le stockage fichier `server/data/templates.json`** : **non fiable sur Vercel**.
   Vercel exécute des fonctions serverless avec un système de fichiers **éphémère et en
   lecture seule** : les écritures ne persistent pas (et échouent souvent). Un gabarit
-  enregistré via l'API serait perdu entre deux appels.
+  enregistré via l'API serait perdu entre deux appels. Utilisez MySQL ou Redis pour la
+  persistance.
 - **MySQL externe ou Redis Upstash** : fonctionne sur Vercel **et** en local avec les
   mêmes variables d'environnement. C'est la solution recommandée pour la persistance
   multi-utilisateurs.
