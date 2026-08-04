@@ -121,6 +121,34 @@ export function createApp() {
     res.json(await storageStatus())
   })
 
+  // ————— Proxy d'images —————
+  // Relaie une image distante en la rendant lisible depuis la page d'impression :
+  //   - contourne l'éventuelle protection anti-hotlinking (la requête serveur
+  //     n'envoie aucun Referer) ;
+  //   - ajoute Access-Control-Allow-Origin pour que l'image puisse être incluse
+  //     dans le PDF (canvas non « tainted »).
+  // Usage : /api/img?url=<url encodée>
+  app.get('/api/img', async (req, res) => {
+    const raw = req.query.url
+    if (!raw || !/^https?:\/\//i.test(raw)) return res.status(400).json({ error: 'url invalide' })
+    const up = new URL(raw)
+    if (up.protocol !== 'http:' && up.protocol !== 'https:') {
+      return res.status(400).json({ error: 'url invalide' })
+    }
+    try {
+      const upstream = await fetch(up.href, { redirect: 'follow', signal: AbortSignal.timeout(20000) })
+      if (!upstream.ok) return res.status(upstream.status).json({ error: 'upstream ' + upstream.status })
+      const ct = upstream.headers.get('content-type') || 'application/octet-stream'
+      const buffer = Buffer.from(await upstream.arrayBuffer())
+      res.setHeader('Content-Type', ct)
+      res.setHeader('Access-Control-Allow-Origin', '*')
+      res.setHeader('Cache-Control', 'public, max-age=3600')
+      res.send(buffer)
+    } catch (err) {
+      res.status(502).json({ error: 'proxy error: ' + (err?.message || err) })
+    }
+  })
+
   // Sert le build statique (dist/) s'il existe + fallback SPA.
   // Plusieurs chemins candidats : en local, dist/ est à côté de server/ ; dans la
   // fonction Vercel (bundlée), __dirname et cwd() peuvent différer de l'emplacement

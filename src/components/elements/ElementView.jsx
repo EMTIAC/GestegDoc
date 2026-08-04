@@ -124,8 +124,21 @@ function PageBreakElement() {
 function ImageElement({ p, free, data }) {
   const bust = useContext(CacheBustContext)
   let src = substitute(p.src, data)
-  if (bust && src && /^https?:/i.test(src)) {
-    src += (src.includes('?') ? '&' : '?') + 'v=' + bust
+  if (src && bust && /^https?:/i.test(src)) {
+    let origin = ''
+    try {
+      origin = new URL(src, window.location.href).origin
+    } catch {
+      origin = ''
+    }
+    if (origin && origin !== window.location.origin) {
+      // Image externe : on la fait passer par le proxy local (/api/img) pour
+      // contourner l'anti-hotlinking et autoriser le CORS (indispensable pour
+      // l'inclure dans le PDF). `&v=` évite le cache serveur/CDN.
+      src = `${window.location.origin}/api/img?url=${encodeURIComponent(src)}&v=${bust}`
+    } else {
+      src += (src.includes('?') ? '&' : '?') + 'v=' + bust
+    }
   }
   if (!src) {
     return (

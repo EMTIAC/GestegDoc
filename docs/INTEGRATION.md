@@ -243,10 +243,11 @@ de l'onglet **Données**. Exemple du gabarit « Facture » :
   (ou via proxy). Sinon, ajoutez le middleware `cors()` dans `server/index.js`.
 - **Accents / UTF-8** : utilisez toujours `unescape(encodeURIComponent(json))` avant `btoa`
   pour éviter les erreurs de décodage.
-- **Images depuis un autre site** : si l'image (URL dynamique `{{chemin}}`) ne s'affiche pas
-  dans la page d'impression alors qu'elle s'ouvre dans un onglet, c'est souvent une protection
-  **anti-hotlinking** (le serveur refuse les requêtes avec un `Referer` étranger). La page
-  d'impression envoie désormais `Referer: none`, ce qui résout la plupart des cas. Pour
-  l'**export PDF**, l'image doit en plus autoriser le CORS : son serveur doit répondre avec
-  un en-tête `Access-Control-Allow-Origin` (Cloudinary le fait ; sinon, servez l'image via
-  votre propre domaine ou un proxy).
+- **Images depuis un autre site** : une image (URL dynamique `{{chemin}}` ou fixe) peut être
+  refusée par le serveur qui l'héberge (protection **anti-hotlinking** : 403 quand un
+  `Referer` étranger est présent). Sur la page d'impression, la vue `/print` envoie
+  `Referer: none` **et** fait passer automatiquement les images externes par un proxy local
+  (`/api/img?url=…`) : celui-ci relance la requête sans `Referer` et ajoute
+  `Access-Control-Allow-Origin`, ce qui permet aussi de les **inclure dans le PDF**.
+  Si une image ne charge toujours pas, son serveur doit accepter les requêtes machines
+  (ex. `User-Agent` de navigateur) ou être servi en HTTPS.
