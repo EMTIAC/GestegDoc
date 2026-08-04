@@ -15,7 +15,8 @@ function fallbackCopy(text) {
 export default function ShareModal({ template, onClose }) {
   const [copied, setCopied] = useState(null)
 
-  const base = `${window.location.origin}/print`
+  const origin = window.location.origin
+  const base = `${origin}/print`
   const portableUrl = `${base}?tpl=${encodeData(template)}`
   const serverUrl = `${base}?template=${encodeURIComponent(template.meta.id)}`
 
@@ -64,10 +65,11 @@ export default function ShareModal({ template, onClose }) {
           </div>
           <div className="share-note">
             <p>Exemple côté d'une application consommatrice (JavaScript) :</p>
-            <pre>{`const data = { facture: { numero: "FAC-2027-001" } };
-const url = "/print?tpl=<votre-gabarit>&data=" + btoa(JSON.stringify(data));
+            <pre>{`const origin = "${origin}"; // origine de cette application
+const data = { facture: { numero: "FAC-2027-001" } };
+const url = origin + "/print?tpl=<votre-gabarit>&data=" + btoa(JSON.stringify(data));
 window.location.href = url;`}</pre>
-            <p>Ou bien via l'API : <code>POST /api/print</code> avec <code>{'{ templateId, data, autoprint }'}</code> → le serveur répond par une redirection vers la page d'impression.</p>
+            <p>Ou bien via l'API : <code>POST {origin}/api/print</code> avec <code>{'{ templateId, data, autoprint }'}</code> → le serveur répond par une redirection vers la page d'impression.</p>
           </div>
         </div>
       </div>

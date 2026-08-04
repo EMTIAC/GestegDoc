@@ -31,6 +31,9 @@ export function buildGuide(template) {
   const margin = template.page.margin ?? 0
   const pages = template.pages || []
   const L = []
+  // Origine de l'application : nécessaire pour que les URL d'intégration soient
+  // absolues et fonctionnent depuis n'importe quel autre projet/site.
+  const origin = (typeof window !== 'undefined' && window.location.origin) || ''
 
   L.push(`# Guide — ${name}`)
   L.push('')
@@ -137,19 +140,19 @@ export function buildGuide(template) {
   L.push(`### URL d’impression (sans serveur)`)
   L.push('')
   L.push('```')
-  L.push(`/print?tpl=<gabarit encodé base64url>&data=<données encodées>&autoprint=1`)
+  L.push(`${origin}/print?tpl=<gabarit encodé base64url>&data=<données encodées>&autoprint=1`)
   L.push('```')
   L.push('')
   L.push('### URL d’impression (gabarit enregistré)')
   L.push('')
   L.push('```')
-  L.push(`/print?template=${id}&data=<données encodées>&autoprint=1`)
+  L.push(`${origin}/print?template=${id}&data=<données encodées>&autoprint=1`)
   L.push('```')
   L.push('')
   L.push('### API')
   L.push('')
   L.push('```')
-  L.push(`POST /api/print`)
+  L.push(`POST ${origin}/api/print`)
   L.push(`{ "templateId": "${id}", "data": { ... }, "autoprint": true }`)
   L.push('```')
   L.push('')

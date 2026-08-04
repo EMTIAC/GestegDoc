@@ -309,8 +309,12 @@ Réponse : **302** vers `/print?template=<id>&data=<encodé>[&autoprint=1]`, ou 
 
 ## 6. URL d'impression
 
+Les URL d'intégration sont **absolues** : elles commencent par l'origine de l'application
+(`https://gesteg-doc.vercel.app` en production) — jamais par `/` seul, sinon elles seraient
+résolues vers le domaine de l'application **consommatrice**.
+
 ```
-/print?template=<id>&data=<base64url JSON>&autoprint=1
+https://gesteg-doc.vercel.app/print?template=<id>&data=<base64url JSON>&autoprint=1
 ```
 
 | Paramètre | Description |
@@ -331,11 +335,14 @@ function encodeB64Url(obj) {
 }
 ```
 
-Exemples d'appel depuis n'importe quelle application :
+Exemples d'appel depuis n'importe quelle application (`ORIGINE` = origine de cette
+application, ex. `https://gesteg-doc.vercel.app`) :
 
 ```js
+const ORIGINE = 'https://gesteg-doc.vercel.app'
+
 // Via l'API (redirection)
-await fetch('/api/print', {
+await fetch(`${ORIGINE}/api/print`, {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({ templateId: 'facture', data: { facture: { numero: 'FAC-2027-001' } }, autoprint: true }),
@@ -343,10 +350,10 @@ await fetch('/api/print', {
 
 // URL directe
 const data = encodeB64Url({ facture: { numero: 'FAC-2027-001' } })
-window.open(`/print?template=facture&data=${data}`, '_blank')
+window.open(`${ORIGINE}/print?template=facture&data=${data}`, '_blank')
 
 // Gabarit embarqué (sans enregistrement préalable)
-window.open(`/print?tpl=${encodeB64Url(gabaritJson)}&data=${data}`, '_blank')
+window.open(`${ORIGINE}/print?tpl=${encodeB64Url(gabaritJson)}&data=${data}`, '_blank')
 ```
 
 ---

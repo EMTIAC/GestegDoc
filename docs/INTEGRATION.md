@@ -48,15 +48,19 @@ applique les données reçues, affiche le document et permet d'enregistrer/impri
 
 ## 3. API
 
-Toutes les routes sont préfixées `/api`.
+Toutes les routes sont préfixées `/api`. L'API est **absolue** : elle est accessible sur
+`<ORIGINE>/api/...`, où `<ORIGINE>` est l'origine de l'application (en production,
+`https://gesteg-doc.vercel.app`). Pour appeler l'API depuis une autre application, utilisez
+toujours l'URL complète — jamais une URL relative (elle serait résolue vers votre propre
+domaine).
 
 | Méthode | Route | Description |
 |---|---|---|
-| `GET` | `/api/templates` | Liste tous les gabarits enregistrés côté serveur |
-| `GET` | `/api/templates/:id` | Récupère un gabarit |
-| `PUT` | `/api/templates/:id` | Enregistre (crée ou écrase) un gabarit |
-| `DELETE` | `/api/templates/:id` | Supprime un gabarit |
-| `POST` | `/api/print` | Construit l'URL d'impression (redirection 302) |
+| `GET` | `<ORIGINE>/api/templates` | Liste tous les gabarits enregistrés côté serveur |
+| `GET` | `<ORIGINE>/api/templates/:id` | Récupère un gabarit |
+| `PUT` | `<ORIGINE>/api/templates/:id` | Enregistre (crée ou écrase) un gabarit |
+| `DELETE` | `<ORIGINE>/api/templates/:id` | Supprime un gabarit |
+| `POST` | `<ORIGINE>/api/print` | Construit l'URL d'impression (redirection 302) |
 
 ### POST /api/print
 
@@ -86,8 +90,11 @@ Réponse :
 
 ## 4. URL d'impression (format)
 
+Les URL d'intégration doivent être **absolues**, préfixées par l'origine de l'application
+(`https://gesteg-doc.vercel.app` en production) :
+
 ```
-/print?template=<id>&data=<base64url JSON>&autoprint=1
+https://gesteg-doc.vercel.app/print?template=<id>&data=<base64url JSON>&autoprint=1
 ```
 
 | Paramètre | Description |
@@ -98,6 +105,10 @@ Réponse :
 | `autoprint` | `1` = lance l'impression automatiquement au chargement |
 
 > La vue `/print` accepte à la fois le **base64url** (`-_`) et le **base64** classique (`+/=`) pour `data` et `tpl`.
+>
+> Préfixez toujours ces URL par l'origine (`window.location.origin` côté navigateur) :
+> sans préfixe, `/print?...` serait résolu vers le domaine de l'application **consommatrice**
+> et ne pointerait pas vers cette application.
 
 ### Encodage des données (JavaScript)
 
@@ -120,10 +131,15 @@ const url = `/print?template=facture&data=${data}&autoprint=1`
 
 ## 5. Exemples d'appel depuis une application externe
 
+> Dans tous les exemples, `ORIGINE` est l'origine de cette application, ex.
+> `const ORIGINE = 'https://gesteg-doc.vercel.app'` (côté navigateur :
+> `window.location.origin` si l'intégration vit sur le même domaine).
+
 ### Scénario A — redirection via l'API (recommandé)
 
 ```js
-const res = await fetch('http://localhost:3001/api/print', {
+const ORIGINE = 'https://gesteg-doc.vercel.app'
+const res = await fetch(`${ORIGINE}/api/print`, {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({
@@ -133,23 +149,26 @@ const res = await fetch('http://localhost:3001/api/print', {
   }),
   redirect: 'manual',
 })
-const url = res.headers.get('location') // /print?template=facture&data=...
-window.location.href = url
+// La redirection 302 pointe vers `${ORIGINE}/print?template=facture&data=...`
+const url = new URL(res.headers.get('location'), ORIGINE)
+window.location.href = url.href
 ```
 
 ### Scénario B — URL directe (le navigateur de l'utilisateur ouvre la page)
 
 ```js
+const ORIGINE = 'https://gesteg-doc.vercel.app'
 const data = encodeB64Url({ facture: { numero: 'FAC-2027-001' } })
-window.open(`/print?template=facture&data=${data}`, '_blank')
+window.open(`${ORIGINE}/print?template=facture&data=${data}`, '_blank')
 ```
 
 ### Scénario C — gabarit embarqué (aucun gabarit pré-enregistré)
 
 ```js
+const ORIGINE = 'https://gesteg-doc.vercel.app'
 const tpl = encodeB64Url(gabaritCompletJson) // ex : exporté depuis l'éditeur (bouton Exporter)
 const data = encodeB64Url({ facture: { numero: 'FAC-2027-001' } })
-window.open(`/print?tpl=${tpl}&data=${data}`, '_blank')
+window.open(`${ORIGINE}/print?tpl=${tpl}&data=${data}`, '_blank')
 ```
 
 > Depuis l'interface, le bouton **Partager** d'un gabarit génère ces URLs (portable + serveur)

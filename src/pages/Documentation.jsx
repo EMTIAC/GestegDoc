@@ -5,6 +5,7 @@ function InlineCode({ children }) {
 }
 
 export default function Documentation() {
+  const origin = typeof window !== 'undefined' ? window.location.origin : '<origine>'
   return (
     <div className="docs">
       <header className="toolbar">
@@ -233,7 +234,7 @@ export default function Documentation() {
               N'importe quelle application peut envoyer ses utilisateurs sur une page
               d'impression avec ses propres données :
             </p>
-            <pre>{`/print?template=<id>&data=<base64url JSON>&autoprint=1`}</pre>
+            <pre>{`${origin}/print?template=<id>&data=<base64url JSON>&autoprint=1`}</pre>
             <ul>
               <li><InlineCode>template</InlineCode> : identifiant d'un gabarit.</li>
               <li><InlineCode>tpl</InlineCode> : gabarit complet encodé (fonctionne sans serveur).</li>
@@ -241,9 +242,13 @@ export default function Documentation() {
               <li><InlineCode>autoprint=1</InlineCode> : impression automatique.</li>
             </ul>
             <p>
-              Une API est aussi disponible : <InlineCode>GET/PUT/DELETE /api/templates</InlineCode>{' '}
-              et <InlineCode>POST /api/print</InlineCode> (redirection vers la page d'impression).
-              Le guide complet est dans le fichier <InlineCode>docs/INTEGRATION.md</InlineCode>.
+              Les URL d'intégration sont <strong>absolues</strong> (elles commencent par{' '}
+              <InlineCode>{origin}</InlineCode>) : elles fonctionnent depuis n'importe quel
+              autre site. Une API est aussi disponible :{' '}
+              <InlineCode>GET/PUT/DELETE {origin}/api/templates</InlineCode> et{' '}
+              <InlineCode>POST {origin}/api/print</InlineCode> (redirection vers la page
+              d'impression). Le guide complet est dans le fichier{' '}
+              <InlineCode>docs/INTEGRATION.md</InlineCode>.
             </p>
           </section>
         </div>
