@@ -22,19 +22,21 @@ function writeFileStore(store) {
 }
 
 // ————— Backend Redis (Upstash / Vercel integration) —————
-let kvInit = null
+let kvInit
+let kvError = null
 // Initialisation paresseuse : pas d'await au niveau du module (robuste à la
 // compilation en CommonJS par Vercel).
 function getKv() {
-  if (!kvInit) {
+  if (kvInit === undefined) {
     kvInit = (async () => {
       const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL
       const token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN
       if (!url || !token) return null
       const { Redis } = await import('@upstash/redis')
       return new Redis({ url, token })
-    })().catch(() => {
-      console.warn('[storage] @upstash/redis indisponible')
+    })().catch((err) => {
+      kvError = err?.message || String(err)
+      console.error('[storage] Redis indisponible, bascule sur un autre backend :', kvError)
       return null
     })
   }
@@ -76,11 +78,12 @@ function mysqlPoolConfig() {
   return cfg
 }
 
-let mysqlInit = null
+let mysqlInit
+let mysqlError = null
 // Schéma minimal + « migrations » idempotentes, exécutées à la première utilisation.
 // Pour faire évoluer le schéma, ajoutez ici des ALTER TABLE idempotents (voir README).
 function getMysql() {
-  if (!mysqlInit) {
+  if (mysqlInit === undefined) {
     mysqlInit = (async () => {
       if (!process.env.MYSQL_URL && !process.env.MYSQL_HOST) return null
       const { default: mysql } = await import('mysql2/promise')
@@ -95,8 +98,9 @@ function getMysql() {
       `)
       return pool
     })().catch((err) => {
-      console.warn('[storage] MySQL indisponible :', err?.message)
-      throw err
+      mysqlError = err?.message || String(err)
+      console.error('[storage] MySQL indisponible, bascule sur un autre backend :', mysqlError)
+      return null
     })
   }
   return mysqlInit
@@ -117,10 +121,19 @@ async function readMysqlStore() {
 }
 
 // ————— Sélection du backend (priorité MySQL > Redis > fichier) —————
+let effectiveBackend = null
 async function resolveBackend() {
-  if (await getMysql()) return 'mysql'
-  if (await getKv()) return 'redis'
-  return 'file'
+  if (effectiveBackend) return effectiveBackend
+  if (await getMysql()) {
+    effectiveBackend = 'mysql'
+    return effectiveBackend
+  }
+  if (await getKv()) {
+    effectiveBackend = 'redis'
+    return effectiveBackend
+  }
+  effectiveBackend = 'file'
+  return effectiveBackend
 }
 
 // ————— API unifiée —————
@@ -194,4 +207,16 @@ export function storageMode() {
   if (process.env.MYSQL_URL || process.env.MYSQL_HOST) return 'mysql (base externe)'
   if (process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL) return 'redis (Upstash / Vercel integration)'
   return 'fichier local'
+}
+
+// État effectif du stockage, pour diagnostic (/api/health).
+export async function storageStatus() {
+  return {
+    modeConfigured: storageMode(),
+    backendEffectif: effectiveBackend || (await resolveBackend()),
+    mysqlConfigured: !!(process.env.MYSQL_URL || process.env.MYSQL_HOST),
+    mysqlError: mysqlError || null,
+    redisConfigured: !!(process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL),
+    redisError: kvError || null,
+  }
 }

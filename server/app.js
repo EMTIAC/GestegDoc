@@ -2,7 +2,7 @@ import express from 'express'
 import { fileURLToPath } from 'url'
 import path from 'path'
 import fs from 'fs'
-import { listTemplates, getTemplate, putTemplate, deleteTemplate } from './storage.js'
+import { listTemplates, getTemplate, putTemplate, deleteTemplate, storageStatus } from './storage.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -12,6 +12,10 @@ export function createApp() {
 
   app.get('/api/templates', async (req, res) => {
     res.json(await listTemplates())
+  })
+
+  app.get('/api/health', async (req, res) => {
+    res.json(await storageStatus())
   })
 
   app.get('/api/templates/:id', async (req, res) => {
@@ -60,6 +64,15 @@ export function createApp() {
       res.sendFile(path.join(dist, 'index.html'))
     })
   }
+
+  // Erreurs : renvoyer du JSON détaillé (utile pour le diagnostic en prod),
+  // jamais la page HTML "Internal Server Error" par défaut d'Express.
+  // eslint-disable-next-line no-unused-vars
+  app.use((err, req, res, next) => {
+    console.error('[api]', req.method, req.path, err?.stack || err)
+    if (res.headersSent) return next(err)
+    res.status(err.status || 500).json({ error: err?.message || 'Erreur interne' })
+  })
 
   return app
 }
