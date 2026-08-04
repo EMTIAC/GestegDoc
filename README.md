@@ -309,6 +309,26 @@ Réponse : **302** vers `/print?template=<id>&data=<encodé>[&autoprint=1]`, ou 
 
 ## 6. URL d'impression
 
+### Deux méthodes d'intégration
+
+| | **URL directe** | **API** |
+|---|---|---|
+| **Qui l'utilise** | Le lien/le bouton de votre application (navigateur) | Votre serveur ou application (appel HTTP `fetch`) |
+| **Résultat** | La page d'impression s'ouvre directement | Une redirection 302 (ou une URL en JSON) que vous suivez |
+| **Gabarit** | `template=<id>` enregistré, ou `tpl=` embarqué | `templateId` enregistré, ou `template` complet |
+| **Taille de l'URL** | Peut devenir très longue avec `tpl=` et de grosses données | Toujours courte (les données ne sont pas dans l'URL) |
+| **Usage typique** | Bouton/lien « Imprimer » dans une application | Backend qui construit l'URL d'impression |
+
+**En clair** : l'**URL directe** envoie l'utilisateur sur la page d'impression avec un
+simple lien ; l'**API** sert à construire cette URL depuis votre serveur (les données
+restent côté serveur, l'URL finale est courte).
+
+**Recommandation** : dans la majorité des cas, l'URL directe avec un gabarit enregistré
+(`?template=<id>`) suffit. Passez à l'API si l'URL devient trop longue ou si vous devez
+construire l'URL côté serveur.
+
+### URL directe
+
 Les URL d'intégration sont **absolues** : elles commencent par l'origine de l'application
 (`https://gesteg-doc.vercel.app` en production) — jamais par `/` seul, sinon elles seraient
 résolues vers le domaine de l'application **consommatrice**.

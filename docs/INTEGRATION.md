@@ -90,6 +90,30 @@ Réponse :
 
 ## 4. URL d'impression (format)
 
+### URL directe ou API ?
+
+Il y a **deux manières** d'envoyer un utilisateur sur la page d'impression :
+
+| | **URL directe** | **API** |
+|---|---|---|
+| **Qui l'utilise** | Le lien/le bouton de votre application (navigateur) | Votre serveur ou application (appel HTTP `fetch`) |
+| **Résultat** | La page d'impression s'ouvre directement | Une redirection 302 (ou une URL en JSON) que vous suivez |
+| **Gabarit** | `template=<id>` enregistré, ou `tpl=` embarqué | `templateId` enregistré, ou `template` complet |
+| **Taille de l'URL** | Peut devenir très longue avec `tpl=` et de grosses données | Toujours courte (les données ne sont pas dans l'URL) |
+| **Usage typique** | Bouton/lien « Imprimer » dans une application | Backend qui construit l'URL d'impression |
+
+**En clair** :
+- L'**URL directe** envoie l'utilisateur sur la page d'impression avec un **simple lien**.
+  Rien à appeler : tout est dans l'URL. C'est le cas le plus fréquent.
+- L'**API** sert à **construire l'URL depuis votre serveur** : vous l'appelez, elle vous
+  répond par une redirection vers la page d'impression. Les données restent côté serveur,
+  l'URL finale reste courte (pas de limite de taille d'URL).
+
+**Recommandation** : dans la majorité des cas, l'**URL directe** avec un gabarit
+enregistré (`?template=<id>`) suffit. Passez à l'**API** si l'URL devient trop longue
+(données volumineuses, gabarit embarqué `tpl=`) ou si vous devez construire l'URL côté
+serveur.
+
 Les URL d'intégration doivent être **absolues**, préfixées par l'origine de l'application
 (`https://gesteg-doc.vercel.app` en production) :
 
@@ -123,8 +147,9 @@ function encodeB64Url(obj) {
 Exemple :
 
 ```js
+const ORIGINE = 'https://gesteg-doc.vercel.app'
 const data = encodeB64Url({ facture: { numero: 'FAC-2027-001', client: 'Jean Dupont' } })
-const url = `/print?template=facture&data=${data}&autoprint=1`
+const url = `${ORIGINE}/print?template=facture&data=${data}&autoprint=1`
 ```
 
 ---

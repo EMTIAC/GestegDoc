@@ -232,23 +232,70 @@ export default function Documentation() {
             <h2>9. Intégration (API / URL)</h2>
             <p>
               N'importe quelle application peut envoyer ses utilisateurs sur une page
-              d'impression avec ses propres données :
+              d'impression avec ses propres données, de <strong>deux manières</strong> :
             </p>
+            <ul>
+              <li>
+                <strong>URL directe</strong> : un lien qui ouvre directement la page
+                d'impression — idéal pour un bouton ou un lien « Imprimer ».
+              </li>
+              <li>
+                <strong>API</strong> : votre serveur appelle l'API et reçoit l'URL
+                d'impression — les données restent hors de l'URL finale.
+              </li>
+            </ul>
+            <p>
+              Dans les deux cas, les URL sont <strong>absolues</strong> : elles commencent
+              par l'origine de cette application (<InlineCode>{origin}</InlineCode>) et
+              fonctionnent depuis n'importe quel autre site.
+            </p>
+
+            <h3>URL directe</h3>
             <pre>{`${origin}/print?template=<id>&data=<base64url JSON>&autoprint=1`}</pre>
             <ul>
-              <li><InlineCode>template</InlineCode> : identifiant d'un gabarit.</li>
-              <li><InlineCode>tpl</InlineCode> : gabarit complet encodé (fonctionne sans serveur).</li>
+              <li>
+                <InlineCode>template</InlineCode> : identifiant d'un gabarit <strong>enregistré</strong> (URL courte, recommandé).
+              </li>
+              <li>
+                <InlineCode>tpl</InlineCode> : gabarit <strong>complet encodé</strong> dans
+                l'URL (fonctionne sans serveur, mais URL plus longue).
+              </li>
               <li><InlineCode>data</InlineCode> : données du document (base64url JSON).</li>
               <li><InlineCode>autoprint=1</InlineCode> : impression automatique.</li>
             </ul>
+
+            <h3>API</h3>
             <p>
-              Les URL d'intégration sont <strong>absolues</strong> (elles commencent par{' '}
-              <InlineCode>{origin}</InlineCode>) : elles fonctionnent depuis n'importe quel
-              autre site. Une API est aussi disponible :{' '}
-              <InlineCode>GET/PUT/DELETE {origin}/api/templates</InlineCode> et{' '}
-              <InlineCode>POST {origin}/api/print</InlineCode> (redirection vers la page
-              d'impression). Le guide complet est dans le fichier{' '}
-              <InlineCode>docs/INTEGRATION.md</InlineCode>.
+              Votre serveur appelle <InlineCode>POST {origin}/api/print</InlineCode> avec{' '}
+              <InlineCode>{'{ templateId, data, autoprint }'}</InlineCode> (ou un gabarit
+              <InlineCode>template</InlineCode> complet). Le serveur répond par une
+              <strong>redirection 302</strong> vers la page d'impression, ou par un JSON{' '}
+              <InlineCode>{'{ "url": "..." }'}</InlineCode> avec{' '}
+              <InlineCode>?redirect=false</InlineCode>. Les gabarits sont aussi exposés en{' '}
+              <InlineCode>GET/PUT/DELETE {origin}/api/templates</InlineCode>.
+            </p>
+
+            <h3>Quelle méthode choisir ?</h3>
+            <table className="docs-table">
+              <thead>
+                <tr><th></th><th>URL directe</th><th>API</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><strong>Qui l'utilise</strong></td><td>Le lien/le bouton de votre application (navigateur)</td><td>Votre serveur ou application (appel HTTP)</td></tr>
+                <tr><td><strong>Résultat</strong></td><td>La page d'impression s'ouvre directement</td><td>Une redirection (ou une URL en JSON) que vous suivez</td></tr>
+                <tr><td><strong>Gabarit</strong></td><td><InlineCode>template=&lt;id&gt;</InlineCode> enregistré, ou <InlineCode>tpl=</InlineCode> embarqué</td><td><InlineCode>templateId</InlineCode> enregistré, ou <InlineCode>template</InlineCode> complet</td></tr>
+                <tr><td><strong>Taille de l'URL</strong></td><td>Peut devenir très longue avec <InlineCode>tpl=</InlineCode> et de grosses données</td><td>Toujours courte (les données ne sont pas dans l'URL)</td></tr>
+                <tr><td><strong>Usage typique</strong></td><td>Bouton/lien « Imprimer » dans une application</td><td>Backend qui construit l'URL d'impression</td></tr>
+              </tbody>
+            </table>
+            <p>
+              <strong>Recommandation</strong> : dans la majorité des cas, l'URL directe avec
+              un gabarit enregistré (<InlineCode>?template=&lt;id&gt;</InlineCode>) suffit.
+              Passez à l'API si l'URL devient trop longue ou si vous devez construire l'URL
+              côté serveur.
+            </p>
+            <p>
+              Le guide complet est dans le fichier <InlineCode>docs/INTEGRATION.md</InlineCode>.
             </p>
           </section>
         </div>
