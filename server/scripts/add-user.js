@@ -6,6 +6,7 @@
 // Nécessite une base Redis configurée (STORAGE_KV_REST_API_URL + STORAGE_KV_REST_API_TOKEN
 // ou UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN).
 import { createUser, setUserPassword, findUserByEmail, requireRedis } from '../auth.js'
+import { kvGet } from '../storage.js'
 
 function arg(name) {
   const i = process.argv.indexOf(`--${name}`)
@@ -42,6 +43,20 @@ async function main() {
     }
     console.error(`Un compte existe déjà : ${email} — utilisez --reset pour réinitialiser le mot de passe.`)
     process.exit(1)
+  }
+
+  // Avertit si un enregistrement illisible existe déjà (il sera remplacé).
+  const raw = await kvGet(`user:email:${String(email).trim().toLowerCase()}`)
+  if (raw != null) {
+    let readable = false
+    try {
+      readable = !!(JSON.parse(raw) && typeof JSON.parse(raw) === 'object')
+    } catch {
+      readable = false
+    }
+    if (!readable) {
+      console.warn(`Enregistrement existant illisible pour ${email} — il sera remplacé par le nouveau compte.`)
+    }
   }
 
   const user = await createUser({ email, password, name })

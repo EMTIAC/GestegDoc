@@ -409,6 +409,11 @@ Voir la [section 9](#9-stockage-des-données-et-déploiement-vercel) pour les d�
   **Télécharger PDF**, qui génère un fichier fidèle sans passer par la boîte de dialogue.
 - **Les données ne s'affichent pas** : vérifiez les chemins dans l'onglet **Données**
   et les références des champs (`facture.numero`…). Le JSON doit être un objet.
+- **La connexion renvoie `500` avec `"[object Object]" is not valid JSON`** : le compte
+  correspondant à cet email existe dans Redis mais son enregistrement est illisible
+  (corrompu par une ancienne version). Recréez-le avec la même commande que la création
+  initiale — l'enregistrement corrompu sera automatiquement remplacé :
+  `npm run adduser -- --email <votre-email> --password '<mot-de-passe>' --name "<Nom>"`.
 
 ---
 

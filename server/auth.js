@@ -31,15 +31,25 @@ export function publicUser(user) {
 }
 
 // ————— Utilisateurs —————
+function parseUserRecord(raw) {
+  if (raw == null) return null
+  try {
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
+    return parsed && typeof parsed === 'object' ? parsed : null
+  } catch {
+    // Enregistrement illisible (ex. valeur corrompue "…" écrite par une
+    // ancienne version) : on le considère comme absent, jamais en 500.
+    return null
+  }
+}
+
 export async function findUserByEmail(email) {
-  const raw = await kvGet(`user:email:${normalizeEmail(email)}`)
-  return raw ? JSON.parse(raw) : null
+  return parseUserRecord(await kvGet(`user:email:${normalizeEmail(email)}`))
 }
 
 export async function findUserById(id) {
   if (!id) return null
-  const raw = await kvGet(`user:id:${id}`)
-  return raw ? JSON.parse(raw) : null
+  return parseUserRecord(await kvGet(`user:id:${id}`))
 }
 
 // Création de compte — réservée à l'admin (script npm run adduser).
