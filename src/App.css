@@ -1240,6 +1240,29 @@ a.brand {
   gap: 10px;
 }
 
+.share-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: #eef3ff;
+  border: 1px solid #c9d8ff;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+  color: #33518f;
+  cursor: pointer;
+}
+
+.share-toggle input {
+  margin-top: 3px;
+  accent-color: #4f7cff;
+}
+
+.share-toggle strong {
+  display: block;
+  margin-bottom: 2px;
+}
+
 .share-row-main {
   flex: 1;
   min-width: 0;

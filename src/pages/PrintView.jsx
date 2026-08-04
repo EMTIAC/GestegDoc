@@ -12,6 +12,9 @@ export default function PrintView() {
   const templateId = params.get('template')
   const dataParam = params.get('data')
   const autoprint = params.get('autoprint') === '1'
+  // Mode « simple utilisateur » : masque les boutons d'administration
+  // (Modifier / Accueil / Aide) réservés au propriétaire du gabarit.
+  const toolbarHidden = params.get('toolbar') === '0' || params.get('toolbar') === 'hide'
 
   const [template, setTemplate] = useState(null)
   const [error, setError] = useState(null)
@@ -94,9 +97,9 @@ export default function PrintView() {
           <button type="button" className="btn" onClick={() => window.print()} disabled={!template}>
             Imprimer / PDF
           </button>
-          {templateId && <Link className="btn" to={`/edit/${templateId}`}>Modifier</Link>}
-          <Link className="btn" to="/">Accueil</Link>
-          <Link className="btn" to="/aide">Aide</Link>
+          {!toolbarHidden && templateId && <Link className="btn" to={`/edit/${templateId}`}>Modifier</Link>}
+          {!toolbarHidden && <Link className="btn" to="/">Accueil</Link>}
+          {!toolbarHidden && <Link className="btn" to="/aide">Aide</Link>}
         </div>
       </header>
       {downloadError && <div className="print-empty">{downloadError}</div>}

@@ -309,23 +309,23 @@ Réponse : **302** vers `/print?template=<id>&data=<encodé>[&autoprint=1]`, ou 
 
 ## 6. URL d'impression
 
-### Deux méthodes d'intégration
+### Trois méthodes d'intégration
 
-| | **URL directe** | **API** |
-|---|---|---|
-| **Qui l'utilise** | Le lien/le bouton de votre application (navigateur) | Votre serveur ou application (appel HTTP `fetch`) |
-| **Résultat** | La page d'impression s'ouvre directement | Une redirection 302 (ou une URL en JSON) que vous suivez |
-| **Gabarit** | `template=<id>` enregistré, ou `tpl=` embarqué | `templateId` enregistré, ou `template` complet |
-| **Taille de l'URL** | Peut devenir très longue avec `tpl=` et de grosses données | Toujours courte (les données ne sont pas dans l'URL) |
-| **Usage typique** | Bouton/lien « Imprimer » dans une application | Backend qui construit l'URL d'impression |
+| | **Embarqué (`tpl=`)** | **Enregistré (`template=`)** | **API** |
+|---|---|---|---|
+| **Qui l'utilise** | Lien/bouton (navigateur) | Lien/bouton (navigateur) | Votre serveur (appel HTTP `fetch`) |
+| **Serveur requis** | Non | Oui (gabarit enregistré) | Oui |
+| **Résultat** | Page d'impression ouverte | Page d'impression ouverte | Redirection 302 (ou URL en JSON) à suivre |
+| **Taille de l'URL** | Longue (limite à respecter) | Courte | Toujours courte (données hors URL) |
+| **Usage typique** | Démo, gabarit non enregistré | La plupart des cas | Backend qui construit l'URL d'impression |
 
-**En clair** : l'**URL directe** envoie l'utilisateur sur la page d'impression avec un
-simple lien ; l'**API** sert à construire cette URL depuis votre serveur (les données
-restent côté serveur, l'URL finale est courte).
+**En clair** : l'**URL directe** (embarquée ou enregistrée) envoie l'utilisateur sur la page
+d'impression avec un simple lien ; l'**API** sert à construire cette URL depuis votre serveur
+(les données restent côté serveur, l'URL finale est courte).
 
 **Recommandation** : dans la majorité des cas, l'URL directe avec un gabarit enregistré
-(`?template=<id>`) suffit. Passez à l'API si l'URL devient trop longue ou si vous devez
-construire l'URL côté serveur.
+(`?template=<id>`), en **mode simple utilisateur** (`&toolbar=0`), suffit. Passez à l'API si
+l'URL devient trop longue ou si vous devez construire l'URL côté serveur.
 
 ### URL directe
 
@@ -334,7 +334,7 @@ Les URL d'intégration sont **absolues** : elles commencent par l'origine de l'a
 résolues vers le domaine de l'application **consommatrice**.
 
 ```
-https://gesteg-doc.vercel.app/print?template=<id>&data=<base64url JSON>&autoprint=1
+https://gesteg-doc.vercel.app/print?template=<id>&data=<base64url JSON>&toolbar=0
 ```
 
 | Paramètre | Description |
@@ -342,7 +342,8 @@ https://gesteg-doc.vercel.app/print?template=<id>&data=<base64url JSON>&autoprin
 | `template` | Id du gabarit (serveur ou localStorage du navigateur) |
 | `tpl` | **Alternative autosuffisante** : gabarit complet encodé en base64url, sans serveur |
 | `data` | Données du document en base64url JSON |
-| `autoprint` | `1` = impression automatique au chargement |
+| `toolbar` | `0` = **mode simple utilisateur** (masque Modifier / Accueil / Aide) — idéal pour un client qui vient juste imprimer |
+| `autoprint` | **Optionnel** : `1` = ouvre la boîte d'impression automatiquement au chargement (à n'utiliser que si nécessaire, sinon elle s'ouvre à chaque rechargement) |
 
 Base64url et base64 classique (`+/=`) sont tous deux acceptés.
 
@@ -361,19 +362,19 @@ application, ex. `https://gesteg-doc.vercel.app`) :
 ```js
 const ORIGINE = 'https://gesteg-doc.vercel.app'
 
-// Via l'API (redirection)
+// Via l'API (redirection, mode simple utilisateur)
 await fetch(`${ORIGINE}/api/print`, {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ templateId: 'facture', data: { facture: { numero: 'FAC-2027-001' } }, autoprint: true }),
+  body: JSON.stringify({ templateId: 'facture', data: { facture: { numero: 'FAC-2027-001' } }, toolbar: false }),
 })
 
-// URL directe
+// URL directe (gabarit enregistré, mode simple utilisateur)
 const data = encodeB64Url({ facture: { numero: 'FAC-2027-001' } })
-window.open(`${ORIGINE}/print?template=facture&data=${data}`, '_blank')
+window.open(`${ORIGINE}/print?template=facture&data=${data}&toolbar=0`, '_blank')
 
 // Gabarit embarqué (sans enregistrement préalable)
-window.open(`${ORIGINE}/print?tpl=${encodeB64Url(gabaritJson)}&data=${data}`, '_blank')
+window.open(`${ORIGINE}/print?tpl=${encodeB64Url(gabaritJson)}&data=${data}&toolbar=0`, '_blank')
 ```
 
 ---

@@ -232,67 +232,83 @@ export default function Documentation() {
             <h2>9. Intégration (API / URL)</h2>
             <p>
               N'importe quelle application peut envoyer ses utilisateurs sur une page
-              d'impression avec ses propres données, de <strong>deux manières</strong> :
+              d'impression avec ses propres données, de <strong>trois manières</strong> :
             </p>
-            <ul>
+            <ol>
               <li>
-                <strong>URL directe</strong> : un lien qui ouvre directement la page
-                d'impression — idéal pour un bouton ou un lien « Imprimer ».
+                <strong>Gabarit embarqué dans l'URL</strong> (<InlineCode>tpl=</InlineCode>) —
+                aucun serveur requis, mais URL longue (limite à respecter avec de grosses
+                images).
               </li>
               <li>
-                <strong>API</strong> : votre serveur appelle l'API et reçoit l'URL
-                d'impression — les données restent hors de l'URL finale.
+                <strong>Gabarit enregistré</strong> (<InlineCode>template=&lt;id&gt;</InlineCode>)
+                — URL courte, gabarit enregistré sur le serveur. <strong>Recommandé.</strong>
               </li>
-            </ul>
+              <li>
+                <strong>API</strong> (<InlineCode>POST /api/print</InlineCode>) — votre serveur
+                appelle l'API, qui répond par une redirection vers la page d'impression. Les
+                données ne transitent pas par l'URL.
+              </li>
+            </ol>
             <p>
-              Dans les deux cas, les URL sont <strong>absolues</strong> : elles commencent
+              Dans tous les cas, les URL sont <strong>absolues</strong> : elles commencent
               par l'origine de cette application (<InlineCode>{origin}</InlineCode>) et
               fonctionnent depuis n'importe quel autre site.
             </p>
 
-            <h3>URL directe</h3>
-            <pre>{`${origin}/print?template=<id>&data=<base64url JSON>&autoprint=1`}</pre>
-            <ul>
-              <li>
-                <InlineCode>template</InlineCode> : identifiant d'un gabarit <strong>enregistré</strong> (URL courte, recommandé).
-              </li>
-              <li>
-                <InlineCode>tpl</InlineCode> : gabarit <strong>complet encodé</strong> dans
-                l'URL (fonctionne sans serveur, mais URL plus longue).
-              </li>
-              <li><InlineCode>data</InlineCode> : données du document (base64url JSON).</li>
-              <li><InlineCode>autoprint=1</InlineCode> : impression automatique.</li>
-            </ul>
+            <h3>Gabarit embarqué (sans serveur)</h3>
+            <pre>{`${origin}/print?tpl=<gabarit encodé base64url>&toolbar=0`}</pre>
+
+            <h3>Gabarit enregistré (URL courte, recommandé)</h3>
+            <pre>{`${origin}/print?template=<id>&data=<base64url JSON>&toolbar=0`}</pre>
 
             <h3>API</h3>
             <p>
               Votre serveur appelle <InlineCode>POST {origin}/api/print</InlineCode> avec{' '}
-              <InlineCode>{'{ templateId, data, autoprint }'}</InlineCode> (ou un gabarit
-              <InlineCode>template</InlineCode> complet). Le serveur répond par une
+              <InlineCode>{'{ templateId, data, autoprint, toolbar }'}</InlineCode> (ou un
+              gabarit <InlineCode>template</InlineCode> complet). Le serveur répond par une
               <strong>redirection 302</strong> vers la page d'impression, ou par un JSON{' '}
               <InlineCode>{'{ "url": "..." }'}</InlineCode> avec{' '}
               <InlineCode>?redirect=false</InlineCode>. Les gabarits sont aussi exposés en{' '}
               <InlineCode>GET/PUT/DELETE {origin}/api/templates</InlineCode>.
             </p>
 
+            <h3>Paramètres communs</h3>
+            <ul>
+              <li>
+                <InlineCode>data</InlineCode> : données du document (base64url JSON).
+              </li>
+              <li>
+                <InlineCode>toolbar=0</InlineCode> : <strong>mode simple utilisateur</strong> —
+                la page s'affiche sans les boutons Modifier / Accueil / Aide (recommandé quand
+                le visiteur vient juste imprimer). Sans ce paramètre, mode professionnel.
+              </li>
+              <li>
+                <InlineCode>autoprint=1</InlineCode> : <strong>optionnel</strong> — ouvre la
+                boîte de dialogue d'impression automatiquement au chargement. À n'utiliser que
+                si nécessaire (sinon elle s'ouvre à chaque chargement/rechargement).
+              </li>
+            </ul>
+
             <h3>Quelle méthode choisir ?</h3>
             <table className="docs-table">
               <thead>
-                <tr><th></th><th>URL directe</th><th>API</th></tr>
+                <tr><th></th><th>Embarqué (<InlineCode>tpl=</InlineCode>)</th><th>Enregistré (<InlineCode>template=</InlineCode>)</th><th>API</th></tr>
               </thead>
               <tbody>
-                <tr><td><strong>Qui l'utilise</strong></td><td>Le lien/le bouton de votre application (navigateur)</td><td>Votre serveur ou application (appel HTTP)</td></tr>
-                <tr><td><strong>Résultat</strong></td><td>La page d'impression s'ouvre directement</td><td>Une redirection (ou une URL en JSON) que vous suivez</td></tr>
-                <tr><td><strong>Gabarit</strong></td><td><InlineCode>template=&lt;id&gt;</InlineCode> enregistré, ou <InlineCode>tpl=</InlineCode> embarqué</td><td><InlineCode>templateId</InlineCode> enregistré, ou <InlineCode>template</InlineCode> complet</td></tr>
-                <tr><td><strong>Taille de l'URL</strong></td><td>Peut devenir très longue avec <InlineCode>tpl=</InlineCode> et de grosses données</td><td>Toujours courte (les données ne sont pas dans l'URL)</td></tr>
-                <tr><td><strong>Usage typique</strong></td><td>Bouton/lien « Imprimer » dans une application</td><td>Backend qui construit l'URL d'impression</td></tr>
+                <tr><td><strong>Qui l'utilise</strong></td><td>Lien/bouton (navigateur)</td><td>Lien/bouton (navigateur)</td><td>Votre serveur (appel HTTP)</td></tr>
+                <tr><td><strong>Serveur requis</strong></td><td>Non</td><td>Oui (gabarit enregistré)</td><td>Oui</td></tr>
+                <tr><td><strong>Résultat</strong></td><td>Page d'impression ouverte</td><td>Page d'impression ouverte</td><td>Redirection 302 (ou URL JSON) à suivre</td></tr>
+                <tr><td><strong>Taille de l'URL</strong></td><td>Longue (limite à respecter)</td><td>Courte</td><td>Toujours courte (données hors URL)</td></tr>
+                <tr><td><strong>Usage typique</strong></td><td>Démo, gabarit non enregistré</td><td>La plupart des cas</td><td>Backend qui construit l'URL</td></tr>
               </tbody>
             </table>
             <p>
-              <strong>Recommandation</strong> : dans la majorité des cas, l'URL directe avec
-              un gabarit enregistré (<InlineCode>?template=&lt;id&gt;</InlineCode>) suffit.
-              Passez à l'API si l'URL devient trop longue ou si vous devez construire l'URL
-              côté serveur.
+              <strong>Recommandation</strong> : dans la majorité des cas, utilisez la forme
+              <strong>enregistrée</strong> (<InlineCode>?template=&lt;id&gt;</InlineCode>)
+              avec <InlineCode>toolbar=0</InlineCode>. Passez à l'API si vous construisez
+              l'URL côté serveur ou si l'URL devient trop longue. Réservez{' '}
+              <InlineCode>tpl=</InlineCode> aux gabarits simples.
             </p>
             <p>
               Le guide complet est dans le fichier <InlineCode>docs/INTEGRATION.md</InlineCode>.

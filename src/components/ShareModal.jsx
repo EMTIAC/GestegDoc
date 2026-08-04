@@ -14,11 +14,15 @@ function fallbackCopy(text) {
 
 export default function ShareModal({ template, onClose }) {
   const [copied, setCopied] = useState(null)
+  // Mode « simple utilisateur » (activé par défaut) : la page d'impression s'ouvre
+  // sans les boutons Modifier / Accueil / Aide. Décochez pour le mode professionnel.
+  const [simple, setSimple] = useState(true)
 
   const origin = window.location.origin
   const base = `${origin}/print`
-  const portableUrl = `${base}?tpl=${encodeData(template)}`
-  const serverUrl = `${base}?template=${encodeURIComponent(template.meta.id)}`
+  const toolbar = simple ? '&toolbar=0' : ''
+  const portableUrl = `${base}?tpl=${encodeData(template)}${toolbar}`
+  const serverUrl = `${base}?template=${encodeURIComponent(template.meta.id)}${toolbar}`
 
   async function copy(text, key) {
     try {
@@ -42,9 +46,16 @@ export default function ShareModal({ template, onClose }) {
         <div className="share-body">
           <p className="hint">
             Envoyez l'utilisateur de votre projet sur l'une de ces URLs pour imprimer ce gabarit.
-            Ajoutez <code>&amp;data=&lt;base64url JSON&gt;</code> pour injecter les données du document, et{' '}
-            <code>&amp;autoprint=1</code> pour déclencher l'impression automatiquement.
+            Ajoutez <code>&amp;data=&lt;base64url JSON&gt;</code> pour injecter les données du document.
           </p>
+          <label className="share-toggle">
+            <input type="checkbox" checked={simple} onChange={(e) => setSimple(e.target.checked)} />
+            <span>
+              <strong>Mode simple utilisateur</strong> — masque les boutons
+              Modifier / Accueil / Aide (idéal pour un client qui vient juste imprimer).
+              Décochez pour laisser le mode professionnel.
+            </span>
+          </label>
           <div className="share-row">
             <div className="share-row-main">
               <span className="share-label">URL portable (gabarit inclus, fonctionne partout)</span>
@@ -67,9 +78,14 @@ export default function ShareModal({ template, onClose }) {
             <p>Exemple côté d'une application consommatrice (JavaScript) :</p>
             <pre>{`const origin = "${origin}"; // origine de cette application
 const data = { facture: { numero: "FAC-2027-001" } };
-const url = origin + "/print?tpl=<votre-gabarit>&data=" + btoa(JSON.stringify(data));
+const url = origin + "/print?tpl=<votre-gabarit>&data=" + btoa(JSON.stringify(data)) + "&toolbar=0";
 window.location.href = url;`}</pre>
-            <p>Ou bien via l'API : <code>POST {origin}/api/print</code> avec <code>{'{ templateId, data, autoprint }'}</code> → le serveur répond par une redirection vers la page d'impression.</p>
+            <p>
+              Ou bien via l'API : <code>POST {origin}/api/print</code> avec{' '}
+              <code>{'{ templateId, data, autoprint, toolbar: false }'}</code> → le serveur
+              répond par une redirection vers la page d'impression (mode simple si{' '}
+              <code>toolbar: false</code>).
+            </p>
           </div>
         </div>
       </div>
