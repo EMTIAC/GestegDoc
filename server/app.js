@@ -2,37 +2,103 @@ import express from 'express'
 import { fileURLToPath } from 'url'
 import path from 'path'
 import fs from 'fs'
-import { listTemplates, getTemplate, putTemplate, deleteTemplate, storageStatus } from './storage.js'
+import { listTemplates, getTemplate, putTemplate, deleteTemplate, migrateLegacyTemplates, storageStatus } from './storage.js'
+import { login, logout, sessionUser } from './auth.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
+const COOKIE_NAME = 'sid'
+const SESSION_MAX_AGE = 30 * 24 * 3600 * 1000 // 30 jours
+
+function parseCookies(req) {
+  const header = req.headers.cookie
+  const out = {}
+  if (header) {
+    for (const part of header.split(';')) {
+      const i = part.indexOf('=')
+      if (i > -1) {
+        try {
+          out[part.slice(0, i).trim()] = decodeURIComponent(part.slice(i + 1).trim())
+        } catch {
+          /* cookie illisible : ignoré */
+        }
+      }
+    }
+  }
+  return out
+}
+
+function cookieOptions(req) {
+  const secure = req.secure || req.headers['x-forwarded-proto'] === 'https'
+  return { httpOnly: true, sameSite: 'lax', secure, path: '/', maxAge: SESSION_MAX_AGE }
+}
+
+function clearCookieOptions(req) {
+  const secure = req.secure || req.headers['x-forwarded-proto'] === 'https'
+  return { httpOnly: true, sameSite: 'lax', secure, path: '/' }
+}
+
+function currentUser(req) {
+  return sessionUser(parseCookies(req).sid)
+}
+
 export function createApp() {
   const app = express()
+  app.set('trust proxy', 1)
   app.use(express.json({ limit: '2mb' }))
 
-  app.get('/api/templates', async (req, res) => {
-    res.json(await listTemplates())
+  // ————— Authentification —————
+  app.post('/api/auth/login', async (req, res) => {
+    const { email, password } = req.body || {}
+    const result = await login(email, password)
+    if (!result) return res.status(401).json({ error: 'Email ou mot de passe incorrect' })
+    res.cookie(COOKIE_NAME, result.token, cookieOptions(req))
+    // Migre d'éventuels gabarits de l'ancienne clé globale vers ce compte.
+    await migrateLegacyTemplates(result.user.id)
+    res.json({ user: result.user })
   })
 
-  app.get('/api/health', async (req, res) => {
-    res.json(await storageStatus())
+  app.post('/api/auth/logout', async (req, res) => {
+    await logout(parseCookies(req).sid)
+    res.clearCookie(COOKIE_NAME, clearCookieOptions(req))
+    res.json({ ok: true })
   })
 
+  app.get('/api/auth/me', async (req, res) => {
+    const user = await currentUser(req)
+    if (!user) return res.status(401).json({ error: 'non connecté' })
+    res.json({ user })
+  })
+
+  async function requireAuth(req, res, next) {
+    const user = await currentUser(req)
+    if (!user) return res.status(401).json({ error: 'Connexion requise' })
+    req.user = user
+    next()
+  }
+
+  // ————— Gabarits —————
+  // Liste : réservée au propriétaire connecté.
+  app.get('/api/templates', requireAuth, async (req, res) => {
+    res.json(await listTemplates(req.user.id))
+  })
+
+  // Lecture par id : publique (liens de partage /print), via le miroir public.
   app.get('/api/templates/:id', async (req, res) => {
     const tpl = await getTemplate(req.params.id)
     if (tpl) res.json(tpl)
     else res.status(404).json({ error: 'template not found' })
   })
 
-  app.put('/api/templates/:id', async (req, res) => {
+  app.put('/api/templates/:id', requireAuth, async (req, res) => {
     const id = req.params.id
     const body = req.body
     if (!body || typeof body !== 'object') return res.status(400).json({ error: 'invalid template' })
-    res.json(await putTemplate(id, body))
+    res.json(await putTemplate(id, body, req.user.id))
   })
 
-  app.delete('/api/templates/:id', async (req, res) => {
-    res.json(await deleteTemplate(req.params.id))
+  app.delete('/api/templates/:id', requireAuth, async (req, res) => {
+    res.json(await deleteTemplate(req.params.id, req.user.id))
   })
 
   app.post('/api/print', async (req, res) => {
@@ -46,6 +112,10 @@ export function createApp() {
 
     if (req.query.redirect === 'false') return res.json({ url })
     res.redirect(url)
+  })
+
+  app.get('/api/health', async (req, res) => {
+    res.json(await storageStatus())
   })
 
   // Sert le build statique (dist/) s'il existe + fallback SPA.

@@ -55,7 +55,7 @@ export default function ShareModal({ template, onClose }) {
           </div>
           <div className="share-row">
             <div className="share-row-main">
-              <span className="share-label">URL serveur (nécessite « Enregistrer serveur »)</span>
+              <span className="share-label">URL serveur (gabarit synchronisé sur le serveur)</span>
               <input readOnly value={serverUrl} />
             </div>
             <button type="button" className="btn" onClick={() => copy(serverUrl, 'server')}>

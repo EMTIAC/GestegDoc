@@ -22,6 +22,7 @@ import useHistory from '../hooks/useHistory'
 import { getTemplate, saveTemplate, exportTemplateFile, parseImportedTemplate, saveToServer } from '../lib/storage'
 import { downloadTemplateGuide } from '../lib/guide'
 import { draggedType } from '../lib/dnd'
+import { useAuth } from '../hooks/useAuth'
 import Toolbar from '../components/Toolbar'
 import Palette from '../components/Palette'
 import PropertiesPanel from '../components/PropertiesPanel'
@@ -47,6 +48,7 @@ function movePages(arr, from, to) {
 
 export default function Editor() {
   const { id } = useParams()
+  const { user } = useAuth()
   const initial = () => {
     const t = getTemplate(id)
     return t ? migrateTemplate(t) : null
@@ -61,12 +63,18 @@ export default function Editor() {
   const [rightTab, setRightTab] = useState('props')
   const [zoom, setZoom] = useState('fit')
   const [freeGuides, setFreeGuides] = useState({ v: [], h: [] })
-  const [saving, setSaving] = useState(false)
+  const [syncMode, setSyncMode] = useState(() => localStorage.getItem('sync_mode') || 'manual')
+  const [saveState, setSaveState] = useState('idle')
+  const [loadingTpl, setLoadingTpl] = useState(() => !getTemplate(id))
   const [toast, setToast] = useState(null)
   const canvasRef = useRef(null)
   const toastTimer = useRef(null)
   const clipboardRef = useRef(null)
   const keyHandlerRef = useRef(null)
+  const syncTimerRef = useRef(null)
+  const lastSavedRef = useRef(null)
+  const templateRef = useRef(null)
+  templateRef.current = template
 
   useEffect(() => {
     function onKeyDown(e) {
@@ -76,19 +84,89 @@ export default function Editor() {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
 
+  // Chargement : on privilégie la copie locale (ne jamais écraser des modifications
+  // non synchronisées) ; le serveur n'est utilisé que si le gabarit est absent ici
+  // (cas d'un gabarit partagé ouvert sur un autre appareil).
   useEffect(() => {
-    const t = getTemplate(id) ? migrateTemplate(getTemplate(id)) : null
-    replace(t)
-    setActivePage(0)
-    setSelectedId(null)
-  }, [id, replace])
+    let cancelled = false
+    setLoadingTpl(true)
+    ;(async () => {
+      let tpl = getTemplate(id) ? migrateTemplate(getTemplate(id)) : null
+      if (!tpl) {
+        try {
+          const res = await fetch(`/api/templates/${encodeURIComponent(id)}`)
+          if (res.ok) {
+            const json = await res.json()
+            if (json && !json.error) tpl = migrateTemplate(json)
+          }
+        } catch {
+          // hors ligne
+        }
+      }
+      if (cancelled) return
+      replace(tpl)
+      lastSavedRef.current = tpl ? JSON.stringify(tpl) : null
+      setSaveState(tpl ? (user ? 'saved' : 'offline') : 'idle')
+      setActivePage(0)
+      setSelectedId(null)
+      setLoadingTpl(false)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [id, replace]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Sauvegarde locale à chaque changement + synchronisation selon le mode choisi.
   useEffect(() => {
     if (!template) return
     saveTemplate(template)
-  }, [template])
+    if (!user) {
+      setSaveState('offline')
+      return
+    }
+    const json = JSON.stringify(template)
+    if (json === lastSavedRef.current) {
+      setSaveState('saved')
+      return
+    }
+    if (syncMode === 'live') {
+      clearTimeout(syncTimerRef.current)
+      syncTimerRef.current = setTimeout(saveNow, 1200)
+    } else {
+      setSaveState('dirty')
+    }
+  }, [template, syncMode, user]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Alerte à la fermeture si des modifications restent à synchroniser,
+  // et vidage d'une sauvegarde live en attente.
+  useEffect(() => {
+    function onBeforeUnload(e) {
+      if (saveState === 'dirty' || saveState === 'saving' || saveState === 'error') {
+        e.preventDefault()
+        e.returnValue = ''
+      }
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => {
+      window.removeEventListener('beforeunload', onBeforeUnload)
+      clearTimeout(syncTimerRef.current)
+      const t = templateRef.current
+      if (user && syncMode === 'live' && t && JSON.stringify(t) !== lastSavedRef.current) {
+        saveToServer(t).catch(() => {})
+      }
+    }
+  }, [saveState, syncMode, user])
 
   usePrintPageStyle(template)
+
+  if (loadingTpl) {
+    return (
+      <div className="not-found">
+        <h2>Chargement…</h2>
+        <Link className="btn" to="/">Retour à l'accueil</Link>
+      </div>
+    )
+  }
 
   if (!template) {
     return (
@@ -208,6 +286,11 @@ export default function Editor() {
     if (mod && key === 'd') {
       e.preventDefault()
       handleDuplicateShortcut()
+      return
+    }
+    if (mod && key === 's') {
+      e.preventDefault()
+      saveNow()
       return
     }
     if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -419,16 +502,39 @@ export default function Editor() {
     notify('Gabarit réinitialisé')
   }
 
-  function handleSaveServer() {
-    setSaving(true)
-    saveToServer(template)
-      .then(() => notify('Enregistré sur le serveur'))
-      .catch((err) => {
-        console.error('saveToServer failed:', err)
-        const msg = err instanceof TypeError ? 'API injoignable (serveur non déployé ou hors ligne)' : err.message
-        notify(`Erreur : ${msg}`)
-      })
-      .finally(() => setSaving(false))
+  async function saveNow() {
+    if (!template) return
+    clearTimeout(syncTimerRef.current)
+    const json = JSON.stringify(template)
+    if (json === lastSavedRef.current) {
+      setSaveState('saved')
+      return
+    }
+    if (!user) {
+      lastSavedRef.current = json
+      setSaveState('offline')
+      notify('Enregistré localement — connectez-vous pour synchroniser en ligne')
+      return
+    }
+    setSaveState('saving')
+    try {
+      await saveToServer(template)
+      lastSavedRef.current = json
+      setSaveState('saved')
+    } catch (err) {
+      console.error('saveToServer failed:', err)
+      setSaveState('error')
+      const msg = err instanceof TypeError ? 'API injoignable (serveur non déployé ou hors ligne)' : err.message
+      notify(`Synchronisation impossible : ${msg}`)
+    }
+  }
+
+  function toggleSyncMode() {
+    const next = syncMode === 'live' ? 'manual' : 'live'
+    localStorage.setItem('sync_mode', next)
+    setSyncMode(next)
+    if (next === 'live') saveNow()
+    notify(next === 'live' ? 'Synchronisation automatique activée' : 'Sauvegarde manuelle (Ctrl+S) activée')
   }
 
   function handleCanvasDrop(e) {
@@ -474,9 +580,12 @@ export default function Editor() {
         onExport={handleExport}
         onImport={handleImport}
         onReset={handleReset}
-        onSaveServer={handleSaveServer}
         onGuide={handleGuide}
-        saving={saving}
+        user={user}
+        saveState={saveState}
+        syncMode={syncMode}
+        onToggleSync={toggleSyncMode}
+        onSaveNow={saveNow}
       />
       <div className="workspace">
         <Palette onAdd={addElement} />

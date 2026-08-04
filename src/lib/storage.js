@@ -94,6 +94,23 @@ export function saveToServer(template) {
   })
 }
 
+export function fetchServerTemplates() {
+  return fetch('/api/templates', { credentials: 'same-origin' }).then((r) => {
+    if (!r.ok) throw new Error(`Erreur serveur ${r.status}`)
+    return r.json()
+  })
+}
+
+export function deleteOnServer(id) {
+  return fetch(`/api/templates/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    credentials: 'same-origin',
+  }).then((r) => {
+    if (!r.ok) throw new Error(`Erreur serveur ${r.status}`)
+    return r.json()
+  })
+}
+
 export function createId() {
   return uid()
 }

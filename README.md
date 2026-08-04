@@ -65,9 +65,8 @@ et réutiliser, y compris depuis d'autres applications via une simple URL ou une
   éléments, et les modes d'impression / intégration (URL et API).
 - **Backend** : API pour gérer les gabarits et générer les URL d'impression, sert aussi
   l'interface en production.
-- **Stockage interchangeable** : fichier local, Redis Upstash ou **MySQL externe** — le
-  même serveur MySQL peut servir en local **et** sur Vercel, sans base de données gérée
-  dans le projet (voir [section 9](#9-stockage-des-données-et-déploiement-vercel)).
+- **Stockage & comptes** : API Express (auth, gabarits, URL d'impression), gabarits
+  rattachés à chaque compte, synchronisés sur Redis Upstash (voir [section 9](#9-stockage-des-données-et-déploiement-vercel)).
 
 ---
 
@@ -124,7 +123,8 @@ Page `/edit/:id`. Organisation en trois colonnes :
 - **Droite — Panneaux** : onglets *Propriétés*, *Données*, *Page*, *Fond*.
 
 La barre du haut contient : nom du gabarit, **Guide**, **Partager**, **Aperçu**,
-**Imprimer / PDF**, **Exporter**, **Importer**, **Enregistrer serveur**, **Réinitialiser**.
+**Imprimer / PDF**, **Exporter**, **Importer**, la **synchronisation** (mode Auto ou
+Ctrl+S + indicateur « non enregistré »), **Réinitialiser**, et le **bouton de connexion**.
 
 **Raccourcis clavier** (élément sélectionné) :
 
@@ -230,9 +230,10 @@ Tout ce qui est posé ici s'imprime dans le PDF.
   Voir la [section 6](#6-url-dimpression).
 - **Exporter** : télécharge le gabarit en JSON.
 - **Importer** : charge un gabarit depuis un fichier JSON.
-- **Enregistrer serveur** : copie le gabarit vers le stockage serveur configuré
-  (fichier local, Redis ou MySQL — voir [section 9](#9-stockage-des-données-et-déploiement-vercel))
-  pour qu'il soit accessible via l'API et l'URL serveur.
+- **Synchronisation** : une fois connecté, le gabarit est synchronisé sur le serveur
+  (mode **Auto** : à chaque modification ; mode **Ctrl+S** : manuel, avec un indicateur
+  « non enregistré » tant que la touche n'a pas été pressée). Les gabarits sont ensuite
+  accessibles depuis n'importe quel appareil (voir [section 9](#9-stockage-des-données-et-déploiement-vercel)).
 
 ---
 
@@ -269,16 +270,21 @@ gabarits.
 
 ## 5. API
 
-Routes préfixées `/api`. Le stockage réel derrière ces routes (fichier local, Redis ou
-MySQL) dépend des variables d'environnement — voir la [section 9](#9-stockage-des-données-et-déploiement-vercel).
+Routes préfixées `/api`. La liste, l'écriture et la suppression des gabarits nécessitent
+une **connexion** (cookie de session) ; la **lecture par id** est publique (liens de
+partage `/print`). Voir la [section 9](#9-stockage-des-données-et-déploiement-vercel).
 
 | Méthode | Route | Description |
 |---|---|---|
-| `GET` | `/api/templates` | Liste des gabarits enregistrés côté serveur |
-| `GET` | `/api/templates/:id` | Récupère un gabarit |
-| `PUT` | `/api/templates/:id` | Enregistre (crée ou écrase) un gabarit |
-| `DELETE` | `/api/templates/:id` | Supprime un gabarit |
+| `POST` | `/api/auth/login` | Connexion email/mot de passe → cookie de session |
+| `POST` | `/api/auth/logout` | Déconnexion |
+| `GET` | `/api/auth/me` | Utilisateur courant (ou `401`) |
+| `GET` | `/api/templates` | Liste **de mes** gabarits (connexion requise) |
+| `GET` | `/api/templates/:id` | Récupère un gabarit par id (public, liens partagés) |
+| `PUT` | `/api/templates/:id` | Enregistre (crée ou écrase) un gabarit (connexion requise) |
+| `DELETE` | `/api/templates/:id` | Supprime un gabarit (connexion requise) |
 | `POST` | `/api/print` | Construit l'URL d'impression (redirection 302) |
+| `GET` | `/api/health` | Diagnostic du backend (Redis, erreurs…) |
 
 ### POST /api/print
 
@@ -357,18 +363,20 @@ get_pdf/
 │  │  ├─ FreeEditable.jsx   # Nœud éditable en mode Libre (positionnement absolu,
 │  │  │                     #   poignées de redimensionnement, guides d'alignement)
 │  │  └─ ZoomableSheet.jsx  # Zoom (Ajuster / 50 / 75 / 100 %)
-│  ├─ hooks/                # usePrintPageStyle, useHistory (annuler / rétablir)
+│  ├─ hooks/                # usePrintPageStyle, useHistory (annuler / rétablir), useAuth
 │  └─ lib/                  # template (modèle), layout (mode libre), tree (arbres),
-│                           # guide (génération du guide .md), storage, url, resolve,
+│                           # guide (génération du guide .md), storage, auth, url, resolve,
 │                           # dnd, pdf (téléchargement PDF)
 ├─ server/
 │  ├─ app.js                # Application Express (routes /api + serveur du build dist/)
-│  ├─ index.js              # Point d'entrée local (app.listen — `npm run dev`, `npm start`)
-│  ├─ storage.js            # Stockage interchangeable (fichier / Redis / MySQL)
-│  └─ data/                 # templates.json (créé au premier enregistrement serveur)
+│  ├─ auth.js               # Comptes (scrypt), sessions Redis, mot de passe
+│  ├─ storage.js            # Stockage clé/valeur (Redis Upstash ou mémoire en dev)
+│  ├─ scripts/
+│  │  └─ add-user.js        # Création de comptes par l'admin (npm run adduser)
+│  └─ data/                 # Données locales de dev
 ├─ api/
 │  └─ index.js              # Point d'entrée Vercel (exporte l'application Express)
-├─ vercel.json              # Déploiement Vercel : route tout vers l'API + inclut dist/
+├─ vercel.json              # Déploiement Vercel : API + fallback SPA + inclut dist/
 ├─ docs/
 │  └─ INTEGRATION.md        # Guide d'intégration (API / URL)
 ├─ dist/                    # Build de production
@@ -376,18 +384,20 @@ get_pdf/
 └─ package.json
 ```
 
-Le **stockage des gabarits** : `localStorage` du navigateur (édition) et, côté serveur,
-`server/storage.js` choisit automatiquement le backend selon les variables
-d'environnement : fichier local, Redis Upstash ou **MySQL externe**.
-Voir la [section 9](#9-stockage-des-données-et-déploiement-vercel) pour les limites
-sur Vercel.
+Le **stockage des gabarits** : `localStorage` du navigateur (édition hors ligne) et, côté
+serveur, `server/storage.js` s'appuie sur Redis Upstash (production) ou la mémoire
+(développement local). Les gabarits sont **rattachés au compte** connecté.
+Voir la [section 9](#9-stockage-des-données-et-déploiement-vercel) pour les détails.
 
 ---
 
 ## 8. Dépannage
 
-- **« Erreur : serveur indisponible » au clic sur « Enregistrer serveur »** :
-  le serveur API n'est pas lancé. Utilisez `npm run dev` (ou `npm start` après build).
+- **« Synchronisation impossible » dans l'éditeur** : vous n'êtes pas connecté ou le
+  serveur API est injoignable. Connectez-vous (`/login`), ou vérifiez `npm run dev`
+  (ou `npm start` après build) localement.
+- **Je ne vois pas mes gabarits sur un autre appareil** : connectez-vous avec le même
+  compte — chaque compte a ses propres gabarits, synchronisés sur le serveur.
 - **Le PDF ne prend pas le bon format / orientation** : vérifiez l'onglet **Page**
   (format, orientation, marge) puis réessayez — privilégiez **Télécharger PDF**.
 - **URL de partage très longue** : une image de fond volumineuse allonge l'URL.
@@ -404,148 +414,109 @@ sur Vercel.
 
 ## 9. Stockage des données et déploiement (Vercel)
 
-### Comment fonctionne le « stockage » ?
+### Comment fonctionne le stockage ?
 
 L'édition s'appuie d'abord sur le **`localStorage` du navigateur** (clé
 `get_pdf_templates_v2`) : chaque modification est enregistrée automatiquement dans le
-navigateur. Ces gabarits ne sont **pas partagés** entre navigateurs ni entre personnes.
+navigateur, même hors connexion. En plus, une fois **connecté**, le gabarit est
+**synchronisé sur le serveur** et rattaché à votre compte : vous le retrouvez depuis
+n'importe quel appareil.
 
-Côté **serveur**, un seul module (`server/storage.js`) expose l'API unifiée
-(`listTemplates`, `getTemplate`, `putTemplate`, `deleteTemplate`). Le backend réel est
-choisi **automatiquement** à partir des variables d'environnement, avec la priorité
-**MySQL > Redis > fichier local** :
+Côté serveur, `server/storage.js` expose une API clé/valeur utilisant :
 
 | Backend | Activation | Où vivent les données |
 |---|---|---|
-| **Fichier local** *(défaut)* | aucun réglage | `server/data/templates.json` (créé au premier enregistrement) |
-| **Redis Upstash** *(gratuit)* | `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` (ou `KV_REST_API_URL` + `KV_REST_API_TOKEN`, ou `STORAGE_KV_REST_API_URL` + `STORAGE_KV_REST_API_TOKEN` fournis par l'intégration Vercel) | Votre base Redis Upstash (Vercel Integration) |
-| **MySQL externe** | `MYSQL_URL` **ou** `MYSQL_HOST` + `MYSQL_USER` + `MYSQL_PASSWORD` + `MYSQL_DATABASE` | Votre base MySQL hébergée ailleurs |
+| **Redis Upstash** *(recommandé, prod)* | `STORAGE_KV_REST_API_URL` + `STORAGE_KV_REST_API_TOKEN` (fournis par l'intégration Vercel), ou `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` | Votre base Redis Upstash |
+| **Mémoire** *(développement local)* | aucun réglage | RAM du processus — **non persistante** (perdue au redémarrage) |
 
-Variables MySQL optionnelles : `MYSQL_PORT` (défaut `3306`) et `MYSQL_SSL=1`
-(pour forcer une connexion SSL — recommandé sur Vercel).
+Clés utilisées : `templates:<userId>` (les gabarits du compte), `public_templates`
+(miroir public pour les liens de partage `/print`), `user:email:…` / `user:id:…`
+(comptes) et `session:<token>` (sessions, valables 30 jours).
 
-L'URL d'impression `/print?template=<id>` cherche d'abord dans le `localStorage`, puis
-appelle l'API serveur si absent. L'URL `/print?tpl=<base64url>` embarque le gabarit
-complet dans l'URL : elle est **autosuffisante** et ne dépend d'aucun serveur.
+### Comptes et connexion
 
-### Utiliser une base MySQL externe (local **et** Vercel)
+Il n'y a **pas d'inscription publique** : les comptes sont créés par l'administrateur.
 
-Le même serveur MySQL hébergé ailleurs (PlanetScale, Railway, Aiven, OVH, Clever Cloud,
-ScaleGrid, Amazon RDS…) peut servir votre app **en développement local** **et** en
-production sur Vercel, sans gérer de base de données dans le projet :
+```bash
+# Depuis le dossier du projet, avec les variables Redis définies dans l'environnement
+npm run adduser -- --email moi@exemple.fr --password 'motdepasse' --name "Moi"
+```
 
-1. Créez la base et un utilisateur sur votre hébergeur.
-2. **Localement** : définissez les variables d'environnement ci-dessus (ou un fichier
-   `.env` chargé au lancement).
-3. **Sur Vercel** : ajoutez **les mêmes variables** dans *Settings → Environment
-   Variables* du projet. Les fonctions serverless se connecteront à la même base.
+Réinitialiser un mot de passe (récupération) :
 
-Conditions pour que cela fonctionne depuis Vercel (serverless) :
-- L'hôte MySQL doit accepter les **connexions externes** (pas de restriction par adresse
-  IP — Vercel ne fournit pas d'IP statiques). Activez le « connect from anywhere » ou
-  équivalent, ou utilisez un tunnel/private networking si votre plan le permet.
-- Connexion **SSL** : définissez `MYSQL_SSL=1` (ou utilisez l'URL de connexion SSL du
-  fournisseur). `mysql2` gère automatiquement le certificat.
-- **Pool de connexions** : `server/storage.js` réutilise un pool (limité à 5 connexions)
-  entre les requêtes — ne créez pas de connexion par appel.
-- Attention aux **limites de connexions** de votre forfait en cas de trafic soutenu.
+```bash
+npm run adduser -- --email moi@exemple.fr --password 'nouveaumotdepasse' --reset
+```
+
+Le script `server/scripts/add-user.js` exige une base Redis configurée (il écrit dans la
+**même** base que la production — définissez les variables `STORAGE_*` du Vercel
+integration en local). Sans Redis, ajoutez `--dev` pour un test rapide (comptes stockés
+en mémoire, perdus au redémarrage).
+
+La connexion se fait sur `/login` (email + mot de passe). La session est un cookie
+`httpOnly`, `SameSite=Lax`, valable 30 jours. Les mots de passe sont hachés (scrypt salé)
+et jamais renvoyés par l'API.
+
+### Synchronisation (Auto ou Ctrl+S)
+
+Dans l'éditeur, un bouton bascule entre deux modes :
+
+- **Auto** : chaque modification est synchronisée sur le serveur (léger délai de 1,2 s
+  pour regrouper les frappes).
+- **Ctrl+S** : synchronisation **manuelle** — un indicateur **« Non enregistré
+  (Ctrl+S) »** s'affiche tant que vous n'avez pas pressé `Ctrl`/`Cmd`+`S`. Le bouton
+  **Enregistrer** fait la même chose. Une alerte prévient avant de quitter la page si
+  des modifications ne sont pas encore synchronisées.
+
+La lecture d'un gabarit (`/edit/:id`) charge d'abord la copie locale, puis la version
+serveur si elle existe (gabarit partagé ouvert sur un autre appareil).
+
+### Les liens de partage restent publics
+
+`/print?template=<id>` est accessible **sans connexion** : c'est le but du partage. Les
+gabarits enregistrés sont exposés par leur identifiant unique. Si vous supprimez un
+gabarit, son lien renvoie « Gabarit introuvable ».
 
 ### Déployer sur Vercel (l'API est pré-configurée)
 
 Le dépôt contient déjà ce qu'il faut pour que **l'API soit déployée** avec le front :
 
 - `api/index.js` : point d'entrée Vercel qui exporte l'application Express.
-- `vercel.json` : route **toutes** les requêtes vers l'application (rewrites) et inclut le
-  build `dist/` dans la fonction serverless (`functions → includeFiles`).
-
-Sur Vercel, l'application tourne donc **entièrement dans une fonction serverless** qui
-gère à la fois l'interface, les routes `/api/*` (dont « Enregistrer serveur » →
-`PUT /api/templates/:id`) et le fallback SPA.
+- `vercel.json` : route `/api/*` vers la fonction serverless, **fallback SPA** pour les
+  routes front (`/print`, `/edit/:id`, `/login`…), et inclut le build `dist/`.
 
 Étapes :
 
 1. Poussez le code sur Git — le dépôt doit contenir `api/index.js` et `vercel.json`.
 2. Dans le tableau de bord Vercel, importez le dépôt (framework **Vite** détecté).
-3. Ajoutez les variables d'environnement de votre base (voir plus haut) : `MYSQL_URL`
-   (ou `MYSQL_HOST` + `MYSQL_USER` + `MYSQL_PASSWORD` + `MYSQL_DATABASE`) et `MYSQL_SSL=1`
-   si votre hébergeur l'exige.
-4. Déployez, puis vérifiez : ouvrez `https://<votre-app>.vercel.app/api/templates`
-   (doit répondre en JSON), puis testez « Enregistrer serveur ».
+3. Installez la base **Upstash Redis** (Vercel Marketplace → votre projet) : elle ajoute
+   automatiquement `STORAGE_KV_REST_API_URL` et `STORAGE_KV_REST_API_TOKEN`.
+4. Créez votre compte : `npm run adduser -- --email … --password …` (avec les variables
+   `STORAGE_*` définies dans votre environnement local).
+5. Déployez, puis vérifiez `https://<votre-app>.vercel.app/api/health` (doit répondre en
+   JSON avec `"backendEffectif":"redis"`), connectez-vous et testez la synchronisation.
 
-> **Diagnostic** : si `GET /api/templates` renvoie la page HTML au lieu de JSON,
-> c'est que le déploiement est resté **statique** (l'API n'a pas été déployée).
-> Vérifiez que `api/index.js` et `vercel.json` sont bien dans le dépôt, puis redéployez.
-
-### Et les migrations, on fait comment ?
-
-En Laravel on écrit des **migrations** (`php artisan migrate`) car le schéma SQL évolue
-à chaque fonctionnalité. Ici, le schéma est volontairement **minimal et stable** : une
-seule table, qui stocke le gabarit complet sous forme de **JSON** :
-
-```sql
-CREATE TABLE IF NOT EXISTS templates (
-  id VARCHAR(191) NOT NULL PRIMARY KEY,
-  name VARCHAR(255) NOT NULL DEFAULT '',
-  data LONGTEXT NOT NULL,          -- le gabarit complet en JSON
-  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-```
-
-Conséquences :
-
-- **Aucune commande à lancer.** Au démarrage du serveur, `server/storage.js` exécute
-  automatiquement `CREATE TABLE IF NOT EXISTS …` : la table est créée si elle n'existe
-  pas. C'est l'équivalent de votre première migration, sans `artisan`.
-- **Le contenu des gabarits n'est pas un schéma.** Les « évolutions » du format d'un
-  gabarit (nouveau champ, nouvelle propriété, structure…) sont gérées par
-  `migrateTemplate()` côté **frontend** (`src/lib/template.js`), pas par la base. La base
-  ne fait que stocker du JSON ; c'est l'application qui l'interprète et le migre à la
-  lecture. Aucune ALTER n'est nécessaire quand vous modifiez le gabarit.
-- **Si vous devez vraiment ajouter une colonne** (ex. un index, un champ de tri), il n'y
-  a pas de dossier de migrations : vous ajoutez une instruction **idempotente** dans la
-  fonction `ensureMysqlTable()` de `server/storage.js`, par exemple :
-
-  ```js
-  await pool.query(`ALTER TABLE templates ADD COLUMN IF NOT EXISTS kind VARCHAR(20) NOT NULL DEFAULT 'template'`)
-  ```
-
-  Comme `CREATE TABLE IF NOT EXISTS` n'altère **pas** une table existante, une nouvelle
-  colonne doit toujours passer par un `ALTER TABLE … ADD COLUMN IF NOT EXISTS` (préfixez
-  la colonne du bon `DEFAULT` pour les lignes existantes). Le serveur l'exécute à chaque
-  démarrage, sans risque, puisqu'il est idempotent. C'est votre « migration » — juste
-  une ligne dans le code, exécutée automatiquement.
-- Les données existantes restent compatibles : la table garde une ligne par gabarit et
-  la colonne `data` (JSON) ne change jamais de sens.
+> **Diagnostic** : si `/api/health` répond en HTML au lieu de JSON, le déploiement est
+> resté **statique** (l'API n'est pas déployée) — vérifiez `api/index.js` + `vercel.json`.
+> Si une route front (`/print`, `/login`…) renvoie un `404: NOT_FOUND` Vercel, le
+> fallback SPA n'est pas en place — vérifiez le `rewrites` `/(.*)` → `/index.html`.
 
 ### Et sur Vercel, ça fonctionne ?
 
-- **Le front + l'API** : fonctionnent. Grâce à `api/index.js` + `vercel.json`, l'API
-  `/api/*` (donc « Enregistrer serveur ») est **déployée par défaut** et écrit dans le
-  backend configuré (fichier, Redis ou MySQL).
-- **Le stockage fichier `server/data/templates.json`** : **non fiable sur Vercel**.
-  Vercel exécute des fonctions serverless avec un système de fichiers **éphémère et en
-  lecture seule** : les écritures ne persistent pas (et échouent souvent). Un gabarit
-  enregistré via l'API serait perdu entre deux appels. Utilisez MySQL ou Redis pour la
-  persistance.
-- **MySQL externe ou Redis Upstash** : fonctionne sur Vercel **et** en local avec les
-  mêmes variables d'environnement. C'est la solution recommandée pour la persistance
-  multi-utilisateurs.
-- **`/print?tpl=<base64url>` (gabarit embarqué)** : fonctionne **partout**, y compris sur
-  Vercel, car tout est dans l'URL et le rendu est 100 % côté client.
-- **`/print?template=<id>` (serveur)** : sur Vercel, fonctionne si le gabarit est dans le
-  `localStorage` du visiteur, ou si un backend persistant (MySQL / Redis) est configuré.
+- **Front + API + connexion + synchronisation** : fonctionnent. Sessions et gabarits
+  vivent dans **Upstash Redis** (persistant, non éphémère).
+- **`/print?tpl=<base64url>` (gabarit embarqué)** : fonctionne **partout** — tout est
+  dans l'URL, le rendu est 100 % côté client.
+- **`/print?template=<id>` (serveur)** : fonctionne sans connexion via le miroir public.
 
 ### Recommandations
 
-- **Partager un gabarit avec d'autres personnes** : utilisez la modal **Partager** et
-  privilégiez l'URL autosuffisante (`tpl=`) — elle s'ouvre chez n'importe qui, sans
-  serveur. Attention : elle est longue (gabarit + données dans l'URL).
-- **Persistance multi-utilisateurs** : branchez une base **MySQL externe** ou **Redis
-  Upstash** (mêmes variables en local et sur Vercel). Pour un usage simple, Upstash
-  (gratuit) est le plus rapide à mettre en place ; MySQL convient si vous avez déjà une
-  base ou des contraintes existantes.
-- Le **serveur Express local** (`npm start`) reste le plus simple pour un usage
-  auto-hébergé complet (stockage fichier inclus, sans configuration).
+- **Retrouver ses gabarits partout** : connectez-vous. Chaque compte a **ses propres**
+  gabarits ; la synchronisation (Auto ou Ctrl+S) les met sur le serveur.
+- **Partager avec d'autres personnes** : la modal **Partager** → URL serveur
+  `/print?template=<id>` ou URL autosuffisante `tpl=` (embarquée, sans serveur).
+- **Sécurité** : mots de passe hachés (scrypt salé), cookie de session `httpOnly`, pas
+  d'inscription publique — les comptes sont créés uniquement par l'administrateur.
 
 ---
 

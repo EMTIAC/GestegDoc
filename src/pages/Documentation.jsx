@@ -68,7 +68,9 @@ export default function Documentation() {
               champs utilisés, modes d'impression), <strong>Partager</strong>,
               <strong>Aperçu</strong>, <strong>Imprimer / PDF</strong>,
               <strong>Exporter</strong>, <strong>Importer</strong>,
-              <strong>Enregistrer serveur</strong> et <strong>Réinitialiser</strong>.
+              <strong>Synchronisation</strong> (mode Auto ou Ctrl+S + état
+              d'enregistrement), <strong>Réinitialiser</strong> et le bouton de
+              <strong>connexion</strong>.
             </p>
           </section>
 
@@ -214,10 +216,13 @@ export default function Documentation() {
               <li><strong>Exporter</strong> : télécharge le gabarit au format JSON.</li>
               <li><strong>Importer</strong> : charge un gabarit depuis un fichier JSON.</li>
               <li>
-                <strong>Enregistrer serveur</strong> : copie le gabarit vers le stockage
-                serveur configuré (fichier local, Redis Upstash ou MySQL externe — selon
-                les variables d'environnement) pour le rendre accessible via l'API et
-                l'URL serveur.
+                <strong>Synchronisation</strong> (bouton dans la barre du haut) : une fois
+                connecté, le gabarit est enregistré sur le serveur et rattaché à votre
+                compte. Deux modes au choix : <strong>Auto</strong> (chaque modification
+                est synchronisée) ou <strong>Ctrl+S</strong> (manuel — un indicateur
+                « Non enregistré (Ctrl+S) » s'affiche tant que la sauvegarde n'a pas été
+                faite). Vos gabarits sont ainsi retrouvables depuis n'importe quel
+                appareil.
               </li>
             </ul>
           </section>

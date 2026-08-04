@@ -1,33 +1,26 @@
-import fs from 'node:fs'
-import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import path from 'node:path'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data')
-const STORE_FILE = path.join(DATA_DIR, 'templates.json')
-const STORE_KEY = 'templates'
+export const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data')
 
-// ————— Backend fichier (local) —————
-function readFileStore() {
-  try {
-    return JSON.parse(fs.readFileSync(STORE_FILE, 'utf8'))
-  } catch {
-    return {}
-  }
+// Clés Redis
+const STORE_KEY = 'templates' // ancienne clé globale (migrée au premier login)
+const PUB_KEY = 'public_templates' // miroir public : nécessaire aux liens de partage /print
+export function templatesKey(userId) {
+  return userId ? `templates:${userId}` : STORE_KEY
 }
 
-function writeFileStore(store) {
-  fs.mkdirSync(DATA_DIR, { recursive: true })
-  fs.writeFileSync(STORE_FILE, JSON.stringify(store, null, 2))
-}
+// Fallback mémoire (développement local sans Redis).
+const memory = new Map()
 
-// ————— Backend Redis (Upstash / Vercel integration) —————
+// ————— Client Redis (Upstash / Vercel integration) —————
 let kvInit
 let kvError = null
 // Noms de variables d'env supportés : l'intégration Upstash via le Vercel
 // Marketplace préfixe par STORAGE_ ; @vercel/kv historique utilise KV_ ; l'app
 // supporte aussi UPSTASH_REDIS_* directement.
-function redisVars() {
+export function redisVars() {
   const url =
     process.env.UPSTASH_REDIS_REST_URL ||
     process.env.KV_REST_API_URL ||
@@ -52,190 +45,141 @@ function getKv() {
       return new Redis({ url, token })
     })().catch((err) => {
       kvError = err?.message || String(err)
-      console.error('[storage] Redis indisponible, bascule sur un autre backend :', kvError)
+      console.error('[storage] Redis indisponible, bascule sur la mémoire :', kvError)
       return null
     })
   }
   return kvInit
 }
 
-async function readRedisStore() {
+export function kvReady() {
+  const { url, token } = redisVars()
+  return !!(url && token)
+}
+
+// ————— API KV générique (Redis si dispo, sinon mémoire) —————
+export async function kvGet(key) {
   const kv = await getKv()
-  if (!kv) return {}
+  if (kv) {
+    const v = await kv.get(key)
+    return v == null ? undefined : v
+  }
+  return memory.get(key)
+}
+
+export async function kvSet(key, value, ttlSeconds) {
+  const kv = await getKv()
+  if (kv) {
+    await kv.set(key, value, ttlSeconds ? { ex: ttlSeconds } : undefined)
+  } else {
+    memory.set(key, value)
+  }
+}
+
+export async function kvDel(key) {
+  const kv = await getKv()
+  if (kv) await kv.del(key)
+  else memory.delete(key)
+}
+
+// ————— Maps sérialisées en JSON —————
+async function readMap(key) {
+  const raw = await kvGet(key)
+  if (raw == null) return {}
   try {
-    const raw = await kv.get(STORE_KEY)
-    if (!raw) return {}
-    return typeof raw === 'string' ? JSON.parse(raw) : raw
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
+    return parsed && typeof parsed === 'object' ? parsed : {}
   } catch {
     return {}
   }
 }
 
-async function writeRedisStore(store) {
-  const kv = await getKv()
-  if (kv) await kv.set(STORE_KEY, store)
+async function writeMap(key, map) {
+  await kvSet(key, JSON.stringify(map))
 }
 
-// ————— Backend MySQL (base externe, compatible Vercel) —————
-function mysqlPoolConfig() {
-  if (process.env.MYSQL_URL) {
-    const uri = process.env.MYSQL_URL
-    return process.env.MYSQL_SSL === '1' ? { uri, ssl: { rejectUnauthorized: false } } : uri
-  }
-  const cfg = {
-    host: process.env.MYSQL_HOST,
-    port: Number(process.env.MYSQL_PORT || 3306),
-    user: process.env.MYSQL_USER,
-    password: process.env.MYSQL_PASSWORD,
-    database: process.env.MYSQL_DATABASE,
-    connectionLimit: 5,
-  }
-  if (process.env.MYSQL_SSL === '1') cfg.ssl = { rejectUnauthorized: false }
-  return cfg
+// ————— Gabarits —————
+export async function listTemplates(userId) {
+  return Object.values(await readMap(templatesKey(userId)))
 }
 
-let mysqlInit
-let mysqlError = null
-// Schéma minimal + « migrations » idempotentes, exécutées à la première utilisation.
-// Pour faire évoluer le schéma, ajoutez ici des ALTER TABLE idempotents (voir README).
-function getMysql() {
-  if (mysqlInit === undefined) {
-    mysqlInit = (async () => {
-      if (!process.env.MYSQL_URL && !process.env.MYSQL_HOST) return null
-      const { default: mysql } = await import('mysql2/promise')
-      const pool = mysql.createPool(mysqlPoolConfig())
-      await pool.query(`
-        CREATE TABLE IF NOT EXISTS templates (
-          id VARCHAR(191) NOT NULL PRIMARY KEY,
-          name VARCHAR(255) NOT NULL DEFAULT '',
-          data LONGTEXT NOT NULL,
-          updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-      `)
-      return pool
-    })().catch((err) => {
-      mysqlError = err?.message || String(err)
-      console.error('[storage] MySQL indisponible, bascule sur un autre backend :', mysqlError)
-      return null
-    })
+// Lecture publique par id (liens de partage) : passe par le miroir public.
+export async function getTemplate(id, userId) {
+  const pub = await readMap(PUB_KEY)
+  if (pub[id]) return pub[id]
+  if (userId) {
+    const mine = await readMap(templatesKey(userId))
+    if (mine[id]) return mine[id]
   }
-  return mysqlInit
+  return null
 }
 
-async function readMysqlStore() {
-  const pool = await getMysql()
-  const [rows] = await pool.query('SELECT id, data FROM templates')
-  const store = {}
-  for (const row of rows) {
-    try {
-      store[row.id] = JSON.parse(row.data)
-    } catch {
-      /* ligne corrompue : ignorée */
-    }
-  }
-  return store
-}
-
-// ————— Sélection du backend (priorité MySQL > Redis > fichier) —————
-let effectiveBackend = null
-async function resolveBackend() {
-  if (effectiveBackend) return effectiveBackend
-  if (await getMysql()) {
-    effectiveBackend = 'mysql'
-    return effectiveBackend
-  }
-  if (await getKv()) {
-    effectiveBackend = 'redis'
-    return effectiveBackend
-  }
-  effectiveBackend = 'file'
-  return effectiveBackend
-}
-
-// ————— API unifiée —————
-export async function listTemplates() {
-  const backend = await resolveBackend()
-  if (backend === 'mysql') return Object.values(await readMysqlStore())
-  if (backend === 'redis') return Object.values(await readRedisStore())
-  return Object.values(readFileStore())
-}
-
-export async function getTemplate(id) {
-  const backend = await resolveBackend()
-  if (backend === 'mysql') {
-    const pool = await getMysql()
-    const [rows] = await pool.query('SELECT data FROM templates WHERE id = ?', [id])
-    if (!rows.length) return null
-    try {
-      return JSON.parse(rows[0].data)
-    } catch {
-      return null
-    }
-  }
-  if (backend === 'redis') return (await readRedisStore())[id] || null
-  return readFileStore()[id] || null
-}
-
-export async function putTemplate(id, body) {
-  const backend = await resolveBackend()
+export async function putTemplate(id, body, userId) {
   const tpl = { ...body, meta: { ...(body.meta || {}), id } }
-  if (backend === 'mysql') {
-    const pool = await getMysql()
-    const name = tpl.meta?.name || ''
-    await pool.query(
-      'INSERT INTO templates (id, name, data) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE name = VALUES(name), data = VALUES(data), updated_at = NOW()',
-      [id, name, JSON.stringify(tpl)]
-    )
-    return { ok: true, id }
+  if (userId) {
+    const mine = await readMap(templatesKey(userId))
+    mine[id] = tpl
+    await writeMap(templatesKey(userId), mine)
   }
-  if (backend === 'redis') {
-    const store = await readRedisStore()
-    store[id] = tpl
-    await writeRedisStore(store)
-    return { ok: true, id }
-  }
-  const store = readFileStore()
-  store[id] = tpl
-  writeFileStore(store)
+  // Miroir public : garde les liens de partage actifs pour tout le monde.
+  const pub = await readMap(PUB_KEY)
+  pub[id] = tpl
+  await writeMap(PUB_KEY, pub)
   return { ok: true, id }
 }
 
-export async function deleteTemplate(id) {
-  const backend = await resolveBackend()
-  if (backend === 'mysql') {
-    const pool = await getMysql()
-    await pool.query('DELETE FROM templates WHERE id = ?', [id])
-    return { ok: true }
+export async function deleteTemplate(id, userId) {
+  if (userId) {
+    const mine = await readMap(templatesKey(userId))
+    if (mine[id]) {
+      delete mine[id]
+      await writeMap(templatesKey(userId), mine)
+    }
   }
-  if (backend === 'redis') {
-    const store = await readRedisStore()
-    delete store[id]
-    await writeRedisStore(store)
-    return { ok: true }
+  const pub = await readMap(PUB_KEY)
+  if (pub[id]) {
+    delete pub[id]
+    await writeMap(PUB_KEY, pub)
   }
-  const store = readFileStore()
-  delete store[id]
-  writeFileStore(store)
   return { ok: true }
 }
 
-export function storageMode() {
-  if (process.env.MYSQL_URL || process.env.MYSQL_HOST) return 'mysql (base externe)'
-  if (redisVars().url) return 'redis (Upstash / Vercel integration)'
-  return 'fichier local'
+// Migration : déplace les gabarits de l'ancienne clé globale vers le compte.
+export async function migrateLegacyTemplates(userId) {
+  if (!userId) return 0
+  const legacy = await readMap(STORE_KEY)
+  const ids = Object.keys(legacy)
+  if (!ids.length) return 0
+  const mine = await readMap(templatesKey(userId))
+  const pub = await readMap(PUB_KEY)
+  let moved = 0
+  for (const id of ids) {
+    if (!mine[id]) {
+      mine[id] = legacy[id]
+      moved++
+    }
+    if (!pub[id]) pub[id] = legacy[id]
+  }
+  if (moved) await writeMap(templatesKey(userId), mine)
+  await writeMap(PUB_KEY, pub)
+  await kvDel(STORE_KEY)
+  return moved
 }
 
-// État effectif du stockage, pour diagnostic (/api/health).
+// ————— État effectif, pour diagnostic (/api/health) —————
 export async function storageStatus() {
   const { url, token } = redisVars()
   return {
     modeConfigured: storageMode(),
-    backendEffectif: effectiveBackend || (await resolveBackend()),
-    mysqlConfigured: !!(process.env.MYSQL_URL || process.env.MYSQL_HOST),
-    mysqlError: mysqlError || null,
+    backendEffectif: (await getKv()) ? 'redis' : 'mem',
     redisConfigured: !!(url && token),
     redisUrl: !!url,
     redisToken: !!token,
     redisError: kvError || null,
   }
+}
+
+export function storageMode() {
+  if (kvReady()) return 'redis (Upstash / Vercel integration)'
+  return 'mémoire (développement)'
 }
