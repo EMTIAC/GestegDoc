@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { encodeData } from '../lib/url'
 
 function fallbackCopy(text) {
@@ -12,8 +12,11 @@ function fallbackCopy(text) {
   ta.remove()
 }
 
+const PORTABLE_LIMIT = 8000
+
 export default function ShareModal({ template, onClose }) {
   const [copied, setCopied] = useState(null)
+  const [portableUrl, setPortableUrl] = useState('')
   // Mode « simple utilisateur » (activé par défaut) : la page d'impression s'ouvre
   // sans les boutons Modifier / Accueil / Aide. Décochez pour le mode professionnel.
   const [simple, setSimple] = useState(true)
@@ -21,8 +24,20 @@ export default function ShareModal({ template, onClose }) {
   const origin = window.location.origin
   const base = `${origin}/print`
   const toolbar = simple ? '&toolbar=0' : ''
-  const portableUrl = `${base}?tpl=${encodeData(template)}${toolbar}`
   const serverUrl = `${base}?template=${encodeURIComponent(template.meta.id)}${toolbar}`
+  const downloadUrl = `${serverUrl}&download=1`
+  const viewUrl = `${serverUrl}&pdf=1`
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const url = `${base}?tpl=${await encodeData(template)}${toolbar}`
+      if (!cancelled) setPortableUrl(url)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [template, base, toolbar])
 
   async function copy(text, key) {
     try {
@@ -59,9 +74,15 @@ export default function ShareModal({ template, onClose }) {
           <div className="share-row">
             <div className="share-row-main">
               <span className="share-label">URL portable (gabarit inclus, fonctionne partout)</span>
-              <input readOnly value={portableUrl} />
+              <input readOnly value={portableUrl} placeholder="Génération…" />
+              {portableUrl.length > PORTABLE_LIMIT && (
+                <p className="share-warn">
+                  URL trop longue ({portableUrl.length} caractères) : certains navigateurs ne la lisent pas.
+                  Préférez l'URL serveur ci-dessous, plus courte.
+                </p>
+              )}
             </div>
-            <button type="button" className="btn primary" onClick={() => copy(portableUrl, 'portable')}>
+            <button type="button" className="btn primary" onClick={() => copy(portableUrl, 'portable')} disabled={!portableUrl}>
               {copied === 'portable' ? 'Copié !' : 'Copier'}
             </button>
           </div>
@@ -74,6 +95,24 @@ export default function ShareModal({ template, onClose }) {
               {copied === 'server' ? 'Copié !' : 'Copier'}
             </button>
           </div>
+          <div className="share-row">
+            <div className="share-row-main">
+              <span className="share-label">URL téléchargement direct (PDF)</span>
+              <input readOnly value={downloadUrl} />
+            </div>
+            <button type="button" className="btn" onClick={() => copy(downloadUrl, 'download')}>
+              {copied === 'download' ? 'Copié !' : 'Copier'}
+            </button>
+          </div>
+          <div className="share-row">
+            <div className="share-row-main">
+              <span className="share-label">URL lecteur PDF (outils du navigateur)</span>
+              <input readOnly value={viewUrl} />
+            </div>
+            <button type="button" className="btn" onClick={() => copy(viewUrl, 'view')}>
+              {copied === 'view' ? 'Copié !' : 'Copier'}
+            </button>
+          </div>
           <div className="share-note">
             <p>Exemple côté d'une application consommatrice (JavaScript) :</p>
             <pre>{`const origin = "${origin}"; // origine de cette application
@@ -84,7 +123,9 @@ window.location.href = url;`}</pre>
               Ou bien via l'API : <code>POST {origin}/api/print</code> avec{' '}
               <code>{'{ templateId, data, autoprint, toolbar: false }'}</code> → le serveur
               répond par une redirection vers la page d'impression (mode simple si{' '}
-              <code>toolbar: false</code>).
+              <code>toolbar: false</code>). Ajoutez <code>download: true</code> pour télécharger
+              directement le PDF, ou <code>view: true</code> pour l'ouvrir dans le lecteur PDF
+              du navigateur.
             </p>
           </div>
         </div>

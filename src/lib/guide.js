@@ -25,7 +25,7 @@ function layoutLabel(layout) {
   return layout === 'free' ? 'Libre (positionnement absolu)' : 'Flux (côte à côte)'
 }
 
-export function buildGuide(template) {
+export async function buildGuide(template) {
   const name = template.meta?.name || 'Gabarit'
   const id = template.meta?.id || '?'
   const { w, h } = pageSizeMm(template.page)
@@ -35,7 +35,7 @@ export function buildGuide(template) {
   // Origine de l'application : nécessaire pour que les URL d'intégration soient
   // absolues et fonctionnent depuis n'importe quel autre projet/site.
   const origin = (typeof window !== 'undefined' && window.location.origin) || ''
-  const tplUrl = encodeData(template)
+  const tplUrl = await encodeData(template)
 
   L.push(`# Guide — ${name}`)
   L.push('')
@@ -185,6 +185,9 @@ export function buildGuide(template) {
   L.push(`{ "templateId": "${id}", "data": { ... }, "autoprint": false, "toolbar": false }`)
   L.push('```')
   L.push('')
+  L.push('Options de l’API : `toolbar: false` (mode simple), `download: true`')
+  L.push('(télécharge le PDF), `view: true` (lecteur PDF du navigateur).')
+  L.push('')
   L.push('### Paramètres communs')
   L.push('')
   L.push('- `data=<base64url JSON>` : injecte les données du document.')
@@ -194,6 +197,15 @@ export function buildGuide(template) {
   L.push('- `autoprint=1` : **optionnel** — déclenche automatiquement la boîte de dialogue')
   L.push('  d’impression du navigateur au chargement. À n’utiliser que si nécessaire')
   L.push('  (sinon elle s’ouvre à chaque chargement ou rechargement de la page).')
+  L.push('- `download=1` : **télécharge directement le PDF** dès l’ouverture du lien, sans')
+  L.push('  passer par la page d’impression. Idéal pour un bouton « Télécharger » externe.')
+  L.push('- `pdf=1` : ouvre le PDF dans le **lecteur PDF natif du navigateur** (avec les')
+  L.push('  outils habituels : Enregistrer, Télécharger, Imprimer) au lieu de la page')
+  L.push('  d’impression de l’application.')
+  L.push('')
+  L.push('> La valeur `tpl=` est automatiquement **compressée** : le gabarit est gzippé')
+  L.push('> avant l’encodage base64url pour réduire la longueur de l’URL. Les anciens')
+  L.push('> liens `tpl=` restent compatibles.')
   L.push('')
   L.push('### Quelle méthode choisir ?')
   L.push('')
@@ -222,8 +234,8 @@ export function buildGuide(template) {
   return L.join('\n')
 }
 
-export function downloadTemplateGuide(template) {
-  const content = buildGuide(template)
+export async function downloadTemplateGuide(template) {
+  const content = await buildGuide(template)
   const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')

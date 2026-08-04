@@ -301,6 +301,9 @@ partage `/print`). Voir la [section 9](#9-stockage-des-données-et-déploiement-
 - `templateId` (ou `template` complet) : gabarit à imprimer.
 - `data` : données injectées dans le document.
 - `autoprint` : `true` pour déclencher l'impression automatiquement.
+- `toolbar` : `false` pour le mode simple utilisateur (sans boutons Modifier / Accueil / Aide).
+- `download` : `true` pour télécharger directement le PDF (au lieu d'ouvrir la page).
+- `view` : `true` pour ouvrir le PDF dans le lecteur PDF natif du navigateur.
 
 Réponse : **302** vers `/print?template=<id>&data=<encodé>[&autoprint=1]`, ou **200**
 `{ "url": "..." }` avec `?redirect=false`.
@@ -340,12 +343,15 @@ https://gesteg-doc.vercel.app/print?template=<id>&data=<base64url JSON>&toolbar=
 | Paramètre | Description |
 |---|---|
 | `template` | Id du gabarit (serveur ou localStorage du navigateur) |
-| `tpl` | **Alternative autosuffisante** : gabarit complet encodé en base64url, sans serveur |
+| `tpl` | **Alternative autosuffisante** : gabarit complet encodé en base64url, sans serveur (compressé automatiquement) |
 | `data` | Données du document en base64url JSON |
 | `toolbar` | `0` = **mode simple utilisateur** (masque Modifier / Accueil / Aide) — idéal pour un client qui vient juste imprimer |
 | `autoprint` | **Optionnel** : `1` = ouvre la boîte d'impression automatiquement au chargement (à n'utiliser que si nécessaire, sinon elle s'ouvre à chaque rechargement) |
+| `download` | **Optionnel** : `1` = **télécharge directement le PDF** dès l'ouverture du lien, sans passer par la page d'impression |
+| `pdf` | **Optionnel** : `1` = ouvre le PDF dans le **lecteur PDF natif du navigateur** (outils Enregistrer / Télécharger / Imprimer) |
 
-Base64url et base64 classique (`+/=`) sont tous deux acceptés.
+Base64url et base64 classique (`+/=`) sont tous deux acceptés. Le gabarit embarqué `tpl=` est
+automatiquement **gzippé puis encodé** pour raccourcir l'URL ; les anciens liens restent compatibles.
 
 Encodage (JavaScript, avec accents/UTF-8) :
 

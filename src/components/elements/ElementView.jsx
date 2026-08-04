@@ -1,5 +1,7 @@
+import { useContext } from 'react'
 import { getPath, substitute } from '../../lib/resolve'
 import { elWidth } from '../../lib/template'
+import { CacheBustContext } from '../../lib/bustContext'
 
 export function ElementList({ elements, data }) {
   return (
@@ -120,7 +122,11 @@ function PageBreakElement() {
 }
 
 function ImageElement({ p, free, data }) {
-  const src = substitute(p.src, data)
+  const bust = useContext(CacheBustContext)
+  let src = substitute(p.src, data)
+  if (bust && src && /^https?:/i.test(src)) {
+    src += (src.includes('?') ? '&' : '?') + 'v=' + bust
+  }
   if (!src) {
     return (
       <div className="pdf-image-empty" style={{ height: free ? '100%' : `${p.height || 40}mm` }}>

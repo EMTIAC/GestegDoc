@@ -102,14 +102,16 @@ export function createApp() {
   })
 
   app.post('/api/print', async (req, res) => {
-    const { template, templateId, data, autoprint, toolbar } = req.body || {}
+    const { template, templateId, data, autoprint, toolbar, download, view } = req.body || {}
     let tpl = template || (await getTemplate(templateId))
     if (!tpl) return res.status(404).json({ error: 'template not found' })
 
     const id = tpl.meta?.id || templateId
     const dataParam = data ? Buffer.from(JSON.stringify(data)).toString('base64url') : ''
     const toolbarParam = toolbar === false || toolbar === 0 ? '&toolbar=0' : ''
-    const url = `/print?template=${encodeURIComponent(id)}&data=${dataParam}${autoprint ? '&autoprint=1' : ''}${toolbarParam}`
+    const downloadParam = download ? '&download=1' : ''
+    const viewParam = view ? '&pdf=1' : ''
+    const url = `/print?template=${encodeURIComponent(id)}&data=${dataParam}${downloadParam}${viewParam}${autoprint ? '&autoprint=1' : ''}${toolbarParam}`
 
     if (req.query.redirect === 'false') return res.json({ url })
     res.redirect(url)

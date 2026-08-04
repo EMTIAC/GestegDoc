@@ -288,7 +288,27 @@ export default function Documentation() {
                 boîte de dialogue d'impression automatiquement au chargement. À n'utiliser que
                 si nécessaire (sinon elle s'ouvre à chaque chargement/rechargement).
               </li>
+              <li>
+                <InlineCode>download=1</InlineCode> : <strong>télécharge directement le PDF</strong>{' '}
+                dès l'ouverture du lien, sans passer par la page d'impression. Idéal pour un
+                bouton « Télécharger » sur votre site.
+              </li>
+              <li>
+                <InlineCode>pdf=1</InlineCode> : ouvre le PDF dans le{' '}
+                <strong>lecteur PDF natif du navigateur</strong> (outils habituels : Enregistrer,
+                Télécharger, Imprimer) au lieu de la page d'impression de l'application.
+              </li>
             </ul>
+            <p>
+              <strong>Exemples</strong> :{' '}
+              <InlineCode>?template=&lt;id&gt;&amp;download=1</InlineCode> (téléchargement
+              automatique), <InlineCode>?template=&lt;id&gt;&amp;pdf=1</InlineCode> (lecteur PDF).
+            </p>
+            <p>
+              Le gabarit embarqué <InlineCode>tpl=</InlineCode> est maintenant{' '}
+              <strong>compressé</strong> (gzip + base64url) pour raccourcir l'URL ; les anciens
+              liens restent compatibles.
+            </p>
 
             <h3>Quelle méthode choisir ?</h3>
             <table className="docs-table">

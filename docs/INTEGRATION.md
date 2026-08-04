@@ -80,10 +80,13 @@ Corps JSON :
 | `template` | non | Gabarit complet fourni directement (aucun enregistrement requis) |
 | `data` | non | Données à injecter dans le document |
 | `autoprint` | non | `true` = l'impression se déclenche automatiquement |
+| `toolbar` | non | `false` = mode simple utilisateur (sans boutons Modifier / Accueil / Aide) |
+| `download` | non | `true` = télécharger directement le PDF (sans ouvrir la page) |
+| `view` | non | `true` = ouvrir le PDF dans le lecteur PDF natif du navigateur |
 
 Réponse :
 
-- Par défaut : **302** vers `/print?template=<id>&data=<encodé>[&autoprint=1]`
+- Par défaut : **302** vers `/print?template=<id>&data=<encodé>[&autoprint=1][&download=1][&pdf=1]`
 - Avec `?redirect=false` : **200** `{ "url": "/print?template=<id>&data=<encodé>" }`
 
 ---
@@ -125,10 +128,15 @@ https://gesteg-doc.vercel.app/print?template=<id>&data=<base64url JSON>&toolbar=
 | Paramètre | Description |
 |---|---|
 | `template` | Id du gabarit (serveur ou localStorage du navigateur) |
-| `tpl` | **Alternative autosuffisante** : gabarit complet encodé en base64url — fonctionne sans serveur |
+| `tpl` | **Alternative autosuffisante** : gabarit complet encodé en base64url — fonctionne sans serveur (compressé automatiquement, anciens liens compatibles) |
 | `data` | Données du document encodées en base64url (JSON) |
 | `toolbar` | `0` = **mode simple utilisateur** (masque Modifier / Accueil / Aide) — idéal pour un client qui vient juste imprimer |
 | `autoprint` | **Optionnel** : `1` = ouvre la boîte d'impression automatiquement au chargement (à n'utiliser que si nécessaire, sinon elle s'ouvre à chaque rechargement) |
+| `download` | **Optionnel** : `1` = **télécharge directement le PDF** dès l'ouverture du lien, sans passer par la page d'impression |
+| `pdf` | **Optionnel** : `1` = ouvre le PDF dans le **lecteur PDF natif du navigateur** (outils Enregistrer / Télécharger / Imprimer) |
+
+Exemples : `?template=<id>&download=1` (téléchargement automatique),
+`?template=<id>&pdf=1` (lecteur PDF du navigateur).
 
 > La vue `/print` accepte à la fois le **base64url** (`-_`) et le **base64** classique (`+/=`) pour `data` et `tpl`.
 >
@@ -235,3 +243,10 @@ de l'onglet **Données**. Exemple du gabarit « Facture » :
   (ou via proxy). Sinon, ajoutez le middleware `cors()` dans `server/index.js`.
 - **Accents / UTF-8** : utilisez toujours `unescape(encodeURIComponent(json))` avant `btoa`
   pour éviter les erreurs de décodage.
+- **Images depuis un autre site** : si l'image (URL dynamique `{{chemin}}`) ne s'affiche pas
+  dans la page d'impression alors qu'elle s'ouvre dans un onglet, c'est souvent une protection
+  **anti-hotlinking** (le serveur refuse les requêtes avec un `Referer` étranger). La page
+  d'impression envoie désormais `Referer: none`, ce qui résout la plupart des cas. Pour
+  l'**export PDF**, l'image doit en plus autoriser le CORS : son serveur doit répondre avec
+  un en-tête `Access-Control-Allow-Origin` (Cloudinary le fait ; sinon, servez l'image via
+  votre propre domaine ou un proxy).
