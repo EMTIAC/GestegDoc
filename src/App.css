@@ -1225,6 +1225,7 @@ a.brand {
 /* Modale de partage */
 .share-modal {
   width: min(720px, 100%);
+  max-height: min(90vh, 680px);
 }
 
 .share-body {
@@ -1232,6 +1233,9 @@ a.brand {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  min-height: 0;
+  overflow-y: auto;
+  flex: 1 1 auto;
 }
 
 .share-row {
